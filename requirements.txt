@@ -1,0 +1,7 @@
+torch==2.4.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+torchvision==0.19.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+torchaudio==2.4.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+easydict==1.13
+matplotlib==3.9.2
+opencv-python==4.10.0.84
+scikit-learn
