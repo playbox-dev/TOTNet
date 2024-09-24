@@ -49,6 +49,7 @@ class Resize(object):
         self.interpolation = interpolation
 
     def __call__(self, imgs, ball_position_xy):
+        transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
             # Resize a sequence of images
@@ -72,6 +73,7 @@ class Random_Crop(object):
         self.interpolation = interpolation
 
     def __call__(self, imgs, ball_position_xy):
+        transformed_imgs = imgs.copy()
         # imgs are before resizing
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
@@ -107,6 +109,7 @@ class Random_Rotate(object):
         self.p = p
 
     def __call__(self, imgs, ball_position_xy):
+        transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             random_angle = random.uniform(-self.rotation_angle_limit, self.rotation_angle_limit)
             # Rotate a sequence of imgs
@@ -130,6 +133,7 @@ class Random_HFlip(object):
         self.p = p
 
     def __call__(self, imgs, ball_position_xy):
+        transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
             transformed_imgs = []

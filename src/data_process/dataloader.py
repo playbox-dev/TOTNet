@@ -1,6 +1,10 @@
 import sys
 
 import torch
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+import os
 from torch.utils.data import DataLoader
 
 sys.path.append('../')
@@ -65,7 +69,67 @@ if __name__ == '__main__':
 
     configs = parse_configs()
     configs.distributed = False  # For testing
+
+    # Create dataloaders
     train_dataloader, val_dataloader, train_sampler = create_train_val_dataloader(configs)
     print('len train_dataloader: {}, val_dataloader: {}'.format(len(train_dataloader), len(val_dataloader)))
+
     test_dataloader = create_test_dataloader(configs)
     print(f"len test_loader {len(test_dataloader)}")
+
+    # # Get one batch from train_dataloader
+    # for batch in train_dataloader:
+    #     # Assuming batch contains both input data and labels
+    #     inputs, (masked_frameids, masked_frames, labels) = batch
+    #     print(f"Train batch data shape: {inputs.shape}")
+    #     print(f"Train batch labels shape: {labels.shape}")
+    #     break  # Exit after printing the first batch
+
+    # # Get one batch from val_dataloader
+    # for batch in val_dataloader:
+    #     inputs, (masked_frameids, masked_frames, labels) = batch
+    #     print(f"Val batch data shape: {inputs.shape}")
+    #     print(f"Val batch labels shape: {labels.shape}")
+    #     break
+
+    # # Get one batch from test_dataloader
+    # for batch in test_dataloader:
+    #     inputs, (masked_frameids, masked_frames, labels) = batch
+    #     # Test dataloader might have only inputs
+    #     print(f"Test batch data shape: {inputs.shape}")
+    #     print(f"Test batch labels shape: {labels.shape}")
+    #     break
+
+    # show example
+    
+    batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader))
+
+    # Check the shapes
+    print(f'Batch data shape: {batch_data.shape}')      # Expected: [8, 7, 2, 3, 1080, 1920]
+    print(f'Batch labels shape: {labels.shape}, batch masked frames shape {masked_frames.shape}')  # Expected: [8, 2]
+
+    # Select the first sample in the batch
+    sample_data = batch_data[0]  # Shape: [7, 2, 3, 1080, 1920]
+
+    # Select the first paire in the sequence
+    frame = sample_data[0]  # Shape: [2, 3, 1080, 1920]
+
+    # Select the first frame
+    img = frame[0]  # Shape: [3, 1080, 1920]
+
+    # Transpose the dimensions to [H, W, C]
+    image = np.transpose(img, (1, 2, 0))  # Shape: [1080, 1920, 3]
+    image = image.cpu().numpy()
+    
+    out_images_dir = os.path.join(configs.results_dir, 'debug', 'ttnet_dataset')
+    if not os.path.isdir(out_images_dir):
+        os.makedirs(out_images_dir)
+    cv2.imwrite(os.path.join(out_images_dir, f'example.jpg'), image)
+
+    example_index = 0
+    masked_image = masked_frames[example_index] # Shape(3,1080,1920)
+    masked_frame = np.transpose(masked_image.cpu().numpy(), (1,2,0))
+    ball_xy = labels[example_index].cpu().numpy()
+    img_with_ball = cv2.circle(masked_frame.copy(), tuple(ball_xy), radius=5, color=(255, 0, 0), thickness=2)
+    img_with_ball = cv2.cvtColor(img_with_ball, cv2.COLOR_RGB2BGR)  # Convert to BGR for saving
+    cv2.imwrite(os.path.join(out_images_dir, f'example_label_{example_index}.jpg'), img_with_ball)
