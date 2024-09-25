@@ -1,6 +1,0 @@
-running build
-running build_py
-copying functions/__init__.py -> build/lib.linux-x86_64-cpython-39/functions
-copying functions/deformable_attn_func.py -> build/lib.linux-x86_64-cpython-39/functions
-running build_ext
-error: [Errno 2] No such file or directory: '/usr/local/cuda/bin/nvcc'
