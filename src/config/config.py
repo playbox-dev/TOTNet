@@ -28,6 +28,8 @@ def parse_configs():
                             'Data Parallel or Distributed Data Parallel')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of threads for loading data')
+    parser.add_argument('--distributed', type=bool, default=False,
+                        help="if its trained using multiple gpu")
 
     configs = edict(vars(parser.parse_args()))
     ####################################################################
