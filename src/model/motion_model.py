@@ -3,12 +3,12 @@ import torch.nn as nn
 import sys
 
 sys.path.append('../')
-from model.backbone_positional_encoding import SpatialFeatureExtractor, PositionEncoding2D
+from model.backbone_positional_encoding import ChosenFeatureExtractor
 
 class MotionModel(nn.Module):
-    def __init__(self, channels=2048, height=34, width=60, pretrained=True):
+    def __init__(self, channels=2048, pretrained=True):
         super(MotionModel, self).__init__()
-        self.spatial_extractor = SpatialFeatureExtractor(pretrained=pretrained)
+        self.spatial_extractor = ChosenFeatureExtractor(choice="single", pretrained=pretrained, out_channels=channels)
         # Fusion module to combine spatial and motion features
         # Using a 1x1 convolution to reduce concatenated channels back to 2048
         self.fusion_module = nn.Conv2d(channels * 3, channels, kernel_size=1)
@@ -29,7 +29,6 @@ class MotionModel(nn.Module):
         # Apply fusion module to reduce channels back to 2048
         fused_features = self.fusion_module(fused_features)  # [B*7, 2048, 34, 60]
 
- 
         # Stack the three feature maps
         # Shape: [B*7, 3, 2048, 34, 60]
         stacked_features = torch.stack((features_frame1, features_frame2, motion_features), dim=1)  # [B*7, 3, 2048, 34, 60]
@@ -103,13 +102,13 @@ if __name__ == '__main__':
     # Instantiate the MotionModel
     height = 1080 // 32  # 34
     width = 1920 // 32   # 60
-    motion_model = MotionModel(channels=2048, height=34, width=60, pretrained=True)
+    motion_model = MotionModel(channels=2048, pretrained=True)
 
     #Forward pass through the backbone
     with torch.no_grad():  # Disable gradient computation for testing
         stacked_features = motion_model(frame1, frame2)
     
-    # Verify output shapes
+    # Verify output shapes, the output shape is [B*P, 3, 2048, 34, 60] where B*P is batch and pair numbers, 3 means frame1, frame2 and motion feature
     print(f"Features stacked_features Shape: {stacked_features.shape}")  # Expected: [B*P, 3, 2048, 34, 60]
     # example_stacked = stacked_features[0]
     # print(f"example stacked shape {example_stacked.shape}")

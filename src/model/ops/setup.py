@@ -59,7 +59,6 @@ def get_extensions():
     ]
     return ext_modules
 
-
 setup(
     name="MultiScaleDeformableAttention",
     version="1.0",

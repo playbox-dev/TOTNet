@@ -106,7 +106,7 @@ if __name__ == '__main__':
 
     # Check the shapes
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [8, 7, 2, 3, 1080, 1920]
-    print(f'Batch labels shape: {labels.shape}, batch masked frames shape {masked_frames.shape}')  # Expected: [8, 2]
+    print(f'Batch labels shape: {labels.shape}, batch masked frames shape {masked_frames.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
 
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [7, 2, 3, 1080, 1920]

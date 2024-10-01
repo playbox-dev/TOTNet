@@ -1,0 +1,5 @@
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/functional.py:513: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3609.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+frame1 flatten shape torch.Size([14, 512, 34, 60]), frame2 flatten shape torch.Size([14, 512, 34, 60])
+projected_frame1_1d shape torch.Size([14, 2040, 512]), positioned_encoding shape torch.Size([1, 2040, 512])
+torch.Size([14, 2040, 512])

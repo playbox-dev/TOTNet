@@ -1,0 +1,25 @@
+* True check_forward_equal_with_pytorch_double: max_abs_err 8.67e-19 max_rel_err 2.35e-16
+* True check_forward_equal_with_pytorch_float: max_abs_err 4.66e-10 max_rel_err 1.13e-07
+* True check_gradient_numerical(D=30)
+* True check_gradient_numerical(D=32)
+* True check_gradient_numerical(D=64)
+* True check_gradient_numerical(D=71)
+* True check_gradient_numerical(D=1025)
+Traceback (most recent call last):
+  File "/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/src/model/ops/test.py", line 86, in <module>
+    check_gradient_numerical(channels, True, True, True)
+  File "/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/src/model/ops/test.py", line 76, in check_gradient_numerical
+    gradok = gradcheck(func, (value.double(), shapes, level_start_index, sampling_locations.double(), attention_weights.double(), im2col_step))
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 2053, in gradcheck
+    return _gradcheck_helper(**args)
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 2082, in _gradcheck_helper
+    _gradcheck_real_imag(
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 1492, in _gradcheck_real_imag
+    gradcheck_fn(
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 1627, in _slow_gradcheck
+    analytical = _check_analytical_jacobian_attributes(
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 784, in _check_analytical_jacobian_attributes
+    reentrant = _check_jacobians_equal(jacobians1, jacobians2, nondet_tol)
+  File "/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/autograd/gradcheck.py", line 706, in _check_jacobians_equal
+    if j1_x.numel() != 0 and (j1_x - j2_x).abs().max() > atol:
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 7.50 GiB. GPU 0 has a total capacity of 44.53 GiB of which 5.51 GiB is free. Including non-PyTorch memory, this process has 39.01 GiB memory in use. Of the allocated memory 37.53 GiB is allocated by PyTorch, and 1.00 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
