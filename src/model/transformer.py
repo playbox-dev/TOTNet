@@ -58,7 +58,7 @@ class Transformer(nn.Module):
         Args:
             srcs(tensor): [lvl, B*P, hidden_dimension, W, H]
             masks(tensor): [lvl, B*P, W, H]
-            pos_embeds(tensor): [lvl, B*P, hidden_dimension, W, H]
+            pos_embeds(tensor): [lvl, 1, hidden_dimension, W, H]
             query_embed(tensor): [num_queries, hidden_dimension]
         """
         assert query_embed is not None, "query_embedding is none"
@@ -69,7 +69,6 @@ class Transformer(nn.Module):
         spatial_shapes = []
 
         for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
-            print(src.shape, mask.shape, pos_embed.shape)
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
@@ -106,43 +105,6 @@ class Transformer(nn.Module):
 
         return hs, init_reference_out, inter_references_out
     
-
-
-class Projection(nn.Module):
-    def __init__(self, backbone_numchannels=2048, hidden_dim=512):
-        super(Projection, self).__init__()  # Initialize the parent nn.Module
-
-        self.input_proj = nn.Sequential(
-            nn.Conv2d(backbone_numchannels, hidden_dim, kernel_size=1),
-            nn.GroupNorm(32, hidden_dim),
-        )
-        # Initialize weights
-        self._init_weights()
-    
-    def _init_weights(self):
-        """
-        Initializes the weights of the projection layers using Xavier uniform initialization
-        and sets biases to zero.
-        """
-        xavier_uniform_(self.input_proj[0].weight, gain=1)
-        if self.input_proj[0].bias is not None:
-            constant_(self.input_proj[0].bias, 0)
-        self.input_proj[1].weight.data.fill_(1)
-        self.input_proj[1].bias.data.zero_()
-    
-    def forward(self, feature_maps):
-        """
-        Applies the projection layers to the input feature maps.
-
-        Args:
-            feature_maps (list of torch.Tensor): List of feature maps from the backbone.
-                Each tensor should have shape [Batch * Pair number, C, H, W].
-
-        Returns:
-            list of torch.Tensor: List of projected feature maps with unified hidden_dim.
-        """
-        projected_feature = self.input_proj(feature_maps)
-        return projected_feature
 
 
 

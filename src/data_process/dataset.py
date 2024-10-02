@@ -62,6 +62,52 @@ class PIDA_dataset(Dataset):
         return image_pairs_np, (masked_frameid, masked_frame, np.array(ball_xy.astype(int)))
 
 
+class Masked_Dataset(Dataset):
+    def __init__(self, events_infor, events_label, transform=None, num_samples=None):
+        self.events_infor = events_infor
+        self.events_label = events_label
+        self.transform = transform
+
+        if num_samples is not None:
+            self.events_infor = self.events_infor[:num_samples]
+
+    def __len__(self):
+        return len(self.events_infor)
+
+    def __getitem__(self, index):
+        img_path_list = self.events_infor[index]
+        ball_xy = self.events_label[index]
+        imgs = []
+        for img_path in img_path_list:
+            img = cv2.imread(img_path)
+            if img is None:
+                raise ValueError(f"Image not found or can't be read at path: {img_path}")
+            imgs.append(img)
+        # Apply augmentation
+        if self.transform:
+            imgs, ball_xy= self.transform(imgs, ball_xy)
+        
+        converted_imgs = []
+        for img in imgs:    
+            img = np.transpose(img, (2, 0, 1))  # Now img is (C, H, W)
+            converted_imgs.append(img)
+        # stack them to form the shape (1,num_frames, C, H, W)
+        # numpy_imgs = np.stack(converted_imgs, axis=0)  # Stack along the new axis (N)
+        # convert them into pairs formation
+        image_list=[]
+        masked_frameid = len(converted_imgs)//2 
+        i = 0
+        while i < len(converted_imgs):
+            # Handle the masked frame case by skipping the masked frame
+            if i != masked_frameid:
+                # Convert to NumPy arrays
+                image_list.append(np.array(converted_imgs[i]))
+            i+=1
+        
+        image_list_np = np.array(image_list)
+        masked_frame = np.array(converted_imgs[masked_frameid])
+        return image_list_np, (masked_frameid, masked_frame, np.array(ball_xy.astype(int)))
+
 if __name__ == '__main__':
     import cv2
     import matplotlib.pyplot as plt
@@ -82,6 +128,7 @@ if __name__ == '__main__':
     ], p=1.)
 
     ttnet_dataset = PIDA_dataset(train_events_infor, train_events_label, transform=transform)
+    masked_dataset = Masked_Dataset(train_events_infor, train_events_label, transform=transform)
 
     print('len(ttnet_dataset): {}'.format(len(ttnet_dataset)))
     example_index = 200
@@ -90,7 +137,7 @@ if __name__ == '__main__':
     if 1:
         # Test F.interpolate (Torch-based resizing)
         print(f"dataset images shape is {image_pairs_np.shape}")
-        
+
         # Reshape (7, 2, C, H, W) to (7*2, C, H, W) to handle each image independently for resizing
         imgs = image_pairs_np.reshape(-1, image_pairs_np.shape[2], image_pairs_np.shape[3], image_pairs_np.shape[4])
         

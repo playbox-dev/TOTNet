@@ -4,4 +4,4 @@
 #SBATCH --job-name=August
 
 
-python deformable_detection_model.py
+python dataloader.py

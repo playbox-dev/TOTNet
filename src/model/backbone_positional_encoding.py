@@ -141,10 +141,11 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
             x (torch.Tensor): Input tensor of shape [Batch * Pair number, 3, H, W]
         
         Returns:
-            torch.Tensor: Extracted features of shape [Batch * Pair number, out_channels, H', W']
+            torch.Tensor: Extracted features of shape [1, Batch * Pair number, out_channels, H', W'] where 1 represents num_feature level
         """
         features = self.feature_extractor(x)
-        return features
+        # unsqueeze on dim 0 so it has the num_feature level
+        return features.unsqueeze(dim=0)
 
 def create_positional_encoding(feature):
     """
@@ -191,6 +192,7 @@ def create_positional_encoding(feature):
 class ChosenFeatureExtractor(nn.Module):
     def __init__(self, choice, pretrained=True, out_channels=256):
         super(ChosenFeatureExtractor, self).__init__()
+        self.out_channels = out_channels
         if choice == "multi":
             self.spatialExtractor = MultiLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels)
         elif choice == "single":

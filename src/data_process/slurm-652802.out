@@ -1,0 +1,5 @@
+len train_dataloader: 36147, val_dataloader: 9037
+len test_loader 6834
+len train_dataloader: 36147, val_dataloader: 9037
+len test_loader 6834
+slurmstepd-wulf-1gpu-vm04: error: *** JOB 652802 ON wulf-1gpu-vm04 CANCELLED AT 2024-10-02T17:11:47 ***
