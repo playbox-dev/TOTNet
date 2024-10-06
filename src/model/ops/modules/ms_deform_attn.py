@@ -94,9 +94,8 @@ class DeformAttn(nn.Module):
         N, Len_q, _ = query.shape
         N, Len_in, _ = input_flatten.shape
         assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == Len_in
-        
         value = self.value_proj(input_flatten)
-
+        
         if input_padding_mask is not None:
             value = value.masked_fill(input_padding_mask[..., None], float(0))
         value = value.view(N, Len_in, self.n_heads, self.d_model // self.n_heads)

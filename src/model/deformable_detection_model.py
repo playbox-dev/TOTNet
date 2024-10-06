@@ -7,8 +7,8 @@ import sys
 sys.path.append('../')
 
 from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
-from model.backbone_positional_encoding import ChosenFeatureExtractor, create_positional_encoding
-from model.transformer import Transformer
+from model.backbone_positional_encoding import build_backbone, create_positional_encoding
+from model.transformer import build_transformer
 from utils.misc import inverse_sigmoid
 
 
@@ -17,8 +17,7 @@ def _get_clones(module, N):
 
 
 class DeformableBallDetection(nn.Module):
-    def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels,
-                 aux_loss=True, with_box_refine=False):
+    def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels, img_size):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -39,6 +38,11 @@ class DeformableBallDetection(nn.Module):
         self.bbox_embed = MLP(self.hidden_dim, self.hidden_dim, 4, 3)
         self.coordinates_embed = nn.Linear(self.hidden_dim, 2)
         self.num_feature_levels = num_feature_levels
+        
+        # Feature extractor layers here...
+        self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[0])  # Predicts x-coordinate
+        self.fc_y = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts y-coordinate
+        self.fc = nn.Linear(in_features=self.hidden_dim, out_features=2)  # where `aggregated_features_dim` is the hidden dimension size
 
         # set query embeddings
         self.query_embed = nn.Embedding(num_queries, self.hidden_dim*2)
@@ -63,8 +67,6 @@ class DeformableBallDetection(nn.Module):
             self.input_proj = Projection(backbone_numchannels=backbone.out_channels, hidden_dim=self.hidden_dim)
         
         self.backbone = backbone
-        self.aux_loss = aux_loss
-        self.with_box_refine = with_box_refine
 
         # init constant bbox embedding layer 
         prior_prob = 0.01
@@ -75,31 +77,20 @@ class DeformableBallDetection(nn.Module):
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = transformer.decoder.num_layers
-        if with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
-            # hack implementation for iterative bounding box refinement
-            self.transformer.decoder.bbox_embed = self.bbox_embed
-        else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.transformer.decoder.bbox_embed = None
+       
+        nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
+        self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
+        self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
+        self.transformer.decoder.bbox_embed = None
+    
+
+
 
     def forward(self, samples):
         """ The forward expects a sample, which consists of:
                - samples.tensor: batched images represents frame , of shape [B, Number of pairs, 2, 3, H, W] or [B, Number of images, C, H ,W]
 
-            It returns a dict with the following elements:
-               - "pred_logits": the classification logits (including no-object) for all queries.
-                                Shape= [batch_size x num_queries x (num_classes + 1)]
-               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
-                               (center_x, center_y, height, width). These values are normalized in [0, 1],
-                               relative to the size of each individual image (disregarding possible padding).
-                               See PostProcess for information on how to retrieve the unnormalized bounding box.
-               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
-                                dictionnaries containing the two above keys for each decoder layer.
+        
         """
         # first step is to split the tensor based on pair
         B, N, C, H, W = samples.shape
@@ -112,7 +103,8 @@ class DeformableBallDetection(nn.Module):
         for l, feat in enumerate(features):
             projected_feature = self.input_proj(feat)
             srcs.append(projected_feature)
-            mask = torch.ones((B, *projected_feature.shape[-2:]), dtype=torch.bool, device=projected_feature.device)
+            # all regions are valid so all pixels are 0 
+            mask = torch.zeros((B*N, *projected_feature.shape[-2:]), dtype=torch.bool, device=projected_feature.device)
             masks.append(mask)
 
         query_embeds = self.query_embed.weight
@@ -120,7 +112,7 @@ class DeformableBallDetection(nn.Module):
         srcs = torch.cat(srcs, 1).unsqueeze(0)
         masks = torch.cat(masks, 1).unsqueeze(0)
         pos = create_positional_encoding(srcs)
-
+        # Regarding transformer 
         # print(srcs.shape, masks.shape, pos.shape, query_embeds.shape)
         hs, init_reference, inter_references = self.transformer(srcs, masks, pos, query_embeds)
         hs_reshaped = hs.view(B, N, self.num_queries*self.hidden_dim)
@@ -129,10 +121,14 @@ class DeformableBallDetection(nn.Module):
         aggregated_features = hs_reshaped.mean(dim=1) # shape is [B, 512]
         # print(aggregated_features.shape) # Expected shape 
         # Predict the offsets for the coordinates using the decoder output (hs)
-        refined_coords = self.coordinates_embed(aggregated_features)  # Shape: [B, 2]
- 
+        # refined_coords = self.coordinates_embed(aggregated_features)  # Shape: [B, 2]
 
-        return refined_coords
+        # Pass through the final fully connected layer to produce logits for both coordinates
+        x_coord = self.fc_x(aggregated_features)  # [B, 1]
+        y_coord = self.fc_y(aggregated_features)  # [B, 1]
+        output_coords_logits = torch.cat([x_coord, y_coord], dim=1)
+      
+        return output_coords_logits
 
 
 
@@ -188,6 +184,18 @@ class MLP(nn.Module):
         return x
 
 
+def build_detector(args):
+    device = torch.device(args.device)
+
+    chosen_feature_extractor = build_backbone(args)
+    transformer = build_transformer(args)
+    
+
+    deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, num_classes=args.num_classes, 
+                                                        num_queries=args.num_queries, num_feature_levels=args.num_feature_levels, img_size=args.img_size).to(device)
+    
+    return deformable_ball_detection_model
+
 
 if __name__ == '__main__':
     from config.config import parse_configs
@@ -217,7 +225,7 @@ if __name__ == '__main__':
     data_reshaped = data_reshaped.float()
 
 
-    chosen_feature_extractor = ChosenFeatureExtractor(choice="single", pretrained=True, out_channels=2048).to(device)
+    chosen_feature_extractor = build_backbone()
     transformer = Transformer(channels=2048, d_model=512, nhead=8, num_feature_levels=1).to(device)
     deformable_ball_detection = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, num_classes=1, 
                                                         num_queries=1, num_feature_levels=1, aux_loss=False, with_box_refine=False).to(device)

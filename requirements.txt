@@ -10,3 +10,4 @@ pycocotools
 tqdm
 scipy
 ninja
+tensorboard

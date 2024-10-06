@@ -44,24 +44,33 @@ class Denormalize():
 
 class Resize(object):
     def __init__(self, new_size, p=0.5, interpolation=cv2.INTER_LINEAR):
-        self.new_size = new_size
+        self.new_size = new_size  # new_size should be (width, height)
         self.p = p
         self.interpolation = interpolation
 
     def __call__(self, imgs, ball_position_xy):
-        transformed_imgs = imgs.copy()
-        if random.random() <= self.p:
-            h, w, c = imgs[0].shape
-            # Resize a sequence of images
-            transformed_imgs = []
-            for img in imgs:
-                transformed_img = cv2.resize(img, self.new_size, interpolation=self.interpolation)
-                transformed_imgs.append(transformed_img)
-            # Dont need to resize seg_img
-            # Adjust ball position
-            w_ratio = w / self.new_size[0]
-            h_ratio = h / self.new_size[1]
-            ball_position_xy = np.array([ball_position_xy[0] / w_ratio, ball_position_xy[1] / h_ratio])
+        # If random value is greater than p, return original imgs and ball position
+        if random.random() > self.p:
+            return imgs, ball_position_xy
+
+        # Original image dimensions (assuming imgs[0] has the original size)
+        original_w, original_h, _ = imgs[0].shape
+
+        # New image dimensions
+        new_w, new_h = self.new_size
+        
+        # Resize a sequence of images
+        transformed_imgs = []
+        for img in imgs:
+            transformed_img = cv2.resize(img, (new_h, new_w), interpolation=self.interpolation)
+            transformed_imgs.append(transformed_img)
+
+        # Adjust ball position
+        w_ratio = new_w / original_w  # New width divided by original width
+        h_ratio = new_h / original_h  # New height divided by original height
+
+        # Scale ball position to match the resized image
+        ball_position_xy = np.array([ball_position_xy[0] * w_ratio, ball_position_xy[1] * h_ratio])
 
         return transformed_imgs, ball_position_xy
 

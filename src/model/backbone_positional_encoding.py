@@ -208,7 +208,10 @@ class ChosenFeatureExtractor(nn.Module):
         out = self.spatialExtractor(x)
 
         return out
-            
+
+
+def build_backbone(args):
+    return ChosenFeatureExtractor(choice=args.backbone_choice, pretrained=args.backbone_pretrained, out_channels=args.backbone_out_channels).to(args.device)
 
     
 

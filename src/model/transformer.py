@@ -56,13 +56,13 @@ class Transformer(nn.Module):
         """
         forward function for the transformer
         Args:
-            srcs(tensor): [lvl, B*P, hidden_dimension, W, H]
-            masks(tensor): [lvl, B*P, W, H]
-            pos_embeds(tensor): [lvl, 1, hidden_dimension, W, H]
+            srcs(tensor): [lvl, B*P, hidden_dimension, H, W]
+            masks(tensor): [lvl, B*P, H, W]
+            pos_embeds(tensor): [lvl, 1, hidden_dimension, H, W]
             query_embed(tensor): [num_queries, hidden_dimension]
         """
         assert query_embed is not None, "query_embedding is none"
-
+   
         src_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
@@ -84,14 +84,21 @@ class Transformer(nn.Module):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=src_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
+        valid_ratios = torch.stack([self.get_valid_ratio(mask) for mask in masks], dim=1)  # Correct stacking over batch size
+        
 
         # encoder
+        # src_flatten.shape [B*N, C, Hidden_dimension], spatial_shapes shape [num_feature_level, 2] lvl_pos_embed_flatten.shape [1, C, Hidden_dimension]
         # put mask_flatten = None since we dont have anything masked
+        # Now since the defomrable encoder takes in a single image each time to produce the outcome, but ours is with each batch it contains 8 frames but just produce
+        # one output, which is different with originally 1 batch with 1 image produce 1 output, so we need to change it 
+        # so the problem in the encoder 
+        
         mask_flatten = None 
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
 
         bs, _, c = memory.shape
+        
         query_embed, tgt = torch.split(query_embed, c, dim=1)
         query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
         tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
@@ -172,9 +179,11 @@ class Encoder(nn.Module):
 
             ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
                                           torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
+        
             # remove since all valid
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+  
             ref = torch.stack((ref_x, ref_y), -1)
             reference_points_list.append(ref)
         reference_points = torch.cat(reference_points_list, 1)
@@ -182,9 +191,16 @@ class Encoder(nn.Module):
         return reference_points
 
     def forward(self, src, spatial_shapes, level_start_index, valid_ratios, pos=None, padding_mask=None):
-
+        """
+        args:
+            src(tensor): [B*N, C, Hidden_dimmension]
+            spatial_shapes(tensor): [Number of feature level, 2]
+            level_start_index(tensor): []
+            valid_ratios: [B*N, Number of feature level, 2]
+        """
         output = src
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
+        
         for _, layer in enumerate(self.layers):
             output = layer(output, pos, reference_points, spatial_shapes, level_start_index, padding_mask)
 
@@ -318,7 +334,9 @@ def get_valid_ratio(mask):
     return valid_ratio
 
 
-
+def build_transformer(args):
+    transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, num_feature_levels=args.num_feature_levels).to(args.device)
+    return transformer
 
 if __name__ == '__main__':
 

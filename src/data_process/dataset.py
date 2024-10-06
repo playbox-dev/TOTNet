@@ -80,6 +80,7 @@ class Masked_Dataset(Dataset):
         imgs = []
         for img_path in img_path_list:
             img = cv2.imread(img_path)
+
             if img is None:
                 raise ValueError(f"Image not found or can't be read at path: {img_path}")
             imgs.append(img)
@@ -89,6 +90,7 @@ class Masked_Dataset(Dataset):
         
         converted_imgs = []
         for img in imgs:    
+            # after transform all images will be in shape (H, W, C)
             img = np.transpose(img, (2, 0, 1))  # Now img is (C, H, W)
             converted_imgs.append(img)
         # stack them to form the shape (1,num_frames, C, H, W)

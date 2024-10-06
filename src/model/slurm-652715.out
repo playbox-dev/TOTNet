@@ -1,3 +1,0 @@
-torch.Size([10, 512]) torch.Size([10, 512]) torch.Size([10, 1024])
-torch.Size([14, 10, 512]) torch.Size([14, 10, 2])
-decoder output torch.Size([14, 10, 512]), reference_points torch.Size([14, 10, 2])

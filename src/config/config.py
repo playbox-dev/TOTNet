@@ -12,12 +12,14 @@ def parse_configs():
                     help='re-produce the results with seed random')
     parser.add_argument('--working-dir', type=str, default='../', metavar='PATH',
                         help='the ROOT working directory')
-    parser.add_argument('--no_cuda', action='store_true',
-                        help='If true, cuda is not used.')
+    parser.add_argument('--saved_fn', type=str, default='logs', metavar='FN',
+                        help='The name using for saving logs, models,...')
     parser.add_argument('--smooth-labelling', action='store_true',
                     help='If true, smoothly make the labels of event spotting')
     parser.add_argument('--no-val', action='store_true',
                     help='If true, use all data for training, no validation set')
+    parser.add_argument('--no-test', action='store_true',
+                        help='If true, dont evaluate the model on the test set')
     parser.add_argument('--val-size', type=float, default=0.2,
                     help='The size of validation set')
     parser.add_argument('--num_samples', type=int, default=None,
@@ -28,14 +30,99 @@ def parse_configs():
                             'Data Parallel or Distributed Data Parallel')
     parser.add_argument('--num_workers', type=int, default=4,
                         help='Number of threads for loading data')
-    parser.add_argument('--distributed', type=bool, default=False,
-                        help="if its trained using multiple gpu")
+    parser.add_argument('--distributed', action='store_true', 
+                       help="If using multiple GPUs for distributed training")
+    parser.add_argument('--print_freq', type=int, default=100, metavar='N',
+                        help='print frequency (default: 100)')
+    parser.add_argument('--checkpoint_freq', type=int, default=2, metavar='N',
+                        help='frequency of saving checkpoints (default: 2)')
+    parser.add_argument('--earlystop_patience', type=int, default=None, metavar='N',
+                        help='Early stopping the training process if performance is not improved within this value')
+    
+    ### build backbone network
+    parser.add_argument('--backbone_choice', type=str, default="single",
+                        help="single means single feature map, multi for multi level feature map")
+    parser.add_argument('--backbone_pretrained', type=bool, default=True,
+                        help="whether backbone should be pretrained")
+    parser.add_argument('--backbone_out_channels', type=int, default=2048,
+                        help="which level the backbone to choose to output feature map")
+    ### build transformer
+    parser.add_argument('--transfromer_dmodel', type=int, default=512,
+                        help="dimension of the transformer model")
+    parser.add_argument('--transformer_nhead', type=int, default=8,
+                        help="number of multihead in transformer")
+    parser.add_argument('--num_feature_levels', type=int, default=1,
+                        help="number of feature map from backbone network")
+    ### build detector
+    parser.add_argument('--num_classes', type=int, default=1,
+                        help="number of classes expected in detector")
+    parser.add_argument('--num_queries', type=int, default=1,
+                        help="numebr of queries in the transformer")
+    
+
+    ####################################################################
+    ##############     Training strategy            ###################
+    ####################################################################
+
+    parser.add_argument('--start_epoch', type=int, default=1, metavar='N',
+                        help='the starting epoch')
+    parser.add_argument('--num_epochs', type=int, default=30, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
+                        help='initial learning rate')
+    parser.add_argument('--minimum_lr', type=float, default=1e-7, metavar='MIN_LR',
+                        help='minimum learning rate during training')
+    parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
+                        help='momentum')
+    parser.add_argument('-wd', '--weight_decay', type=float, default=0., metavar='WD',
+                        help='weight decay (default: 1e-6)')
+    parser.add_argument('--optimizer_type', type=str, default='adam', metavar='OPTIMIZER',
+                        help='the type of optimizer, it can be sgd or adam')
+    parser.add_argument('--lr_type', type=str, default='plateau', metavar='SCHEDULER',
+                        help='the type of the learning rate scheduler (steplr or ReduceonPlateau)')
+    parser.add_argument('--lr_factor', type=float, default=0.5, metavar='FACTOR',
+                        help='reduce the learning rate with this factor')
+    parser.add_argument('--lr_step_size', type=int, default=5, metavar='STEP_SIZE',
+                        help='step_size of the learning rate when using steplr scheduler')
+    parser.add_argument('--lr_patience', type=int, default=3, metavar='N',
+                        help='patience of the learning rate when using ReduceoPlateau scheduler')
+    parser.add_argument(
+        '--img_size', 
+        type=int, 
+        nargs=2,  # This makes sure two integers are provided (for width and height)
+        metavar=('width', 'height'),
+        default=(270, 480),
+        help="Specify the new image size as width and height (e.g., --img_size 540 960)"
+    )
+    
+
+    ####################################################################
+    ##############     Distributed Data Parallel            ############
+    ####################################################################
+    parser.add_argument('--world_size', default=-1, type=int, metavar='N',
+                        help='number of nodes for distributed training')
+    parser.add_argument('--rank', default=-1, type=int, metavar='N',
+                        help='node rank for distributed training')
+    parser.add_argument('--dist_url', default='tcp://127.0.0.1:29500', type=str,
+                        help='url used to set up distributed training')
+    parser.add_argument('--dist_backend', default='nccl', type=str,
+                        help='distributed backend')
+    parser.add_argument('--gpu_idx', default=None, type=int,
+                        help='GPU index to use.')
+    parser.add_argument('--no_cuda', action='store_true',
+                        help='If true, cuda is not used.')
+    parser.add_argument('--multiprocessing_distributed', action='store_true',
+                        help='Use multi-processing distributed training to launch '
+                             'N processes per node, which has N GPUs. This is the '
+                             'fastest way to use PyTorch for either single node or '
+                             'multi node data parallel training')
 
     configs = edict(vars(parser.parse_args()))
     ####################################################################
     ############## Hardware configurations ############################
     ####################################################################
     configs.device = torch.device('cpu' if configs.no_cuda else 'cuda')
+    
     configs.ngpus_per_node = torch.cuda.device_count()
 
     configs.pin_memory = True
@@ -44,6 +131,8 @@ def parse_configs():
     configs.num_frames_sequence = 9
 
     configs.results_dir = os.path.join(configs.working_dir, 'results')
+    configs.logs_dir = os.path.join(configs.working_dir, 'logs', configs.saved_fn)
+    configs.checkpoints_dir = os.path.join(configs.working_dir, 'checkpoints', configs.saved_fn)
 
     ####################################################################
     ##############     Data configs            ###################

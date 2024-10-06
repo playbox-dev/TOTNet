@@ -1,6 +1,0 @@
-/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/functional.py:513: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3609.)
-  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
-tensor([[-0.1367,  0.1662]], device='cuda:0', grad_fn=<AddmmBackward0>)
-tensor([[760, 644]]) tensor([4])
-torch.Size([3, 1080, 1920]) torch.Size([2])
-/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/src/model/example_label_4.jpg
