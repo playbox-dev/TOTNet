@@ -11,13 +11,13 @@ import torch.distributed as dist
 from tqdm import tqdm
 from model.deformable_detection_model import build_detector
 from model.model_utils import make_data_parallel, get_num_parameters, post_process
-from losses_metrics.losses import Ball_Detection_Loss
-from losses_metrics.metrics import calculate_metrics
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss
+from losses_metrics.metrics import heatmap_calculate_metrics
 from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float
 from utils.misc import AverageMeter, ProgressMeter, print_gpu_memory_usage
-from data_process.dataloader import create_masked_train_val_dataloader, create_train_val_dataloader, create_masked_test_dataloader, create_test_dataloader
+from data_process.dataloader import create_masked_train_val_dataloader, create_train_val_dataloader, create_masked_test_dataloader, create_test_dataloader, create_normal_train_val_dataloader
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -98,7 +98,7 @@ def main_worker(gpu_idx, configs):
     best_val_loss = np.inf
     earlystop_count = 0
     is_best = False
-    loss_func = Ball_Detection_Loss().to(configs.device)
+    loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
 
 
     if configs.is_master_node:
@@ -107,8 +107,9 @@ def main_worker(gpu_idx, configs):
 
     if logger is not None:
         logger.info(">>> Loading dataset & getting dataloader...")
-    # Create dataloader
-    train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
+    # Create dataloader, option with normal data
+    # train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
+    train_loader, val_loader, train_sampler = create_normal_train_val_dataloader(configs)
     test_loader = create_masked_test_dataloader(configs)
 
     # Print the number of samples for this GPU/worker
@@ -196,7 +197,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
     model.train()
     start_time = time.time()
     
-    for batch_idx, (batch_data, (masked_frameids, masked_frames, labels)) in enumerate(tqdm(train_loader)):
+    for batch_idx, (batch_data, (masked_frameids, _, labels)) in enumerate(tqdm(train_loader)):
 
         data_time.update(time.time() - start_time)
 
@@ -205,7 +206,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
         labels = labels.to(configs.device)
         labels = labels.float()
 
-        output_coords = model(batch_data.float())
+        output_coords = model(batch_data.float()) # output in shape ([B,W],[B,H]) if output heatmap
         total_loss = loss_func(output_coords, labels)
 
         # For torch.nn.DataParallel case
@@ -258,11 +259,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             output_coords_logits = model(batch_data.float())
             total_loss = loss_func(output_coords_logits, labels)
 
-            x_coord_pred = torch.round(output_coords_logits[:, 0])
-            y_coord_pred = torch.round(output_coords_logits[:, 1])
-            output_coords = torch.stack([x_coord_pred, y_coord_pred], dim=1)  # [B, 2]
-
-            mse, rmse, mae, euclidean_distance = calculate_metrics(output_coords, labels)
+            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_coords_logits, labels, img_height=configs.img_size[0], img_width=configs.img_size[1])
             rmse_tensor = torch.tensor(rmse).to(configs.device)
 
             # For torch.nn.DataParallel case

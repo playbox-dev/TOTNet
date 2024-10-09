@@ -24,73 +24,36 @@ class MultiLevelSpatialFeatureExtractor(nn.Module):
         else:
             resnet = models.resnet50(weights=None)
         
-        # Extract layers up to layer4 (conv5_x)
+        # Extract layers from ResNet-50 backbone
         self.backbone = nn.Sequential(
-            resnet.conv1,    # [Batch, 64, H/2, W/2]
+            resnet.conv1,
             resnet.bn1,
             resnet.relu,
-            resnet.maxpool,  # [Batch, 64, H/4, W/4]
-            resnet.layer1,   # [Batch, 256, H/4, W/4]
-            resnet.layer2,   # [Batch, 512, H/8, W/8]  -> C3
-            resnet.layer3,   # [Batch, 1024, H/16, W/16] -> C4
-            resnet.layer4    # [Batch, 2048, H/32, W/32] -> C5
+            resnet.maxpool,
+            resnet.layer1,  # C2 (H/4, W/4)
+            resnet.layer2,  # C3 (H/8, W/8)
+            resnet.layer3,  # C4 (H/16, W/16)
+            resnet.layer4   # C5 (H/32, W/32)
         )
         
         # Define the input channels for FPN (from C3, C4, C5)
         in_channels_list = [512, 1024, 2048]
-        self.fpn = FeaturePyramidNetwork(
-            in_channels_list=in_channels_list,
-            out_channels=out_channels,
-            extra_blocks=LastLevelMaxPool()  # Adds P6 by max pooling P5
-        )
-        
-        # Initialize FPN weights
-        for m in self.fpn.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.xavier_uniform_(m.weight)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-        
+        self.num_channels = [512, 1024, 2048]
+
+       
         # Freeze backbone if not training
         for param in self.backbone.parameters():
             param.requires_grad = False
 
     def forward(self, x):
-        """
-        Forward pass for spatial feature extraction.
+        # Forward pass through the ResNet backbone
+        c2 = self.backbone[0:5](x)  # Output from layer1 (C2), shape: [Batch, 256, H/4, W/4]
+        c3 = self.backbone[5](c2)   # Output from layer2 (C3), shape: [Batch, 512, H/8, W/8]
+        c4 = self.backbone[6](c3)   # Output from layer3 (C4), shape: [Batch, 1024, H/16, W/16]
+        c5 = self.backbone[7](c4)   # Output from layer4 (C5), shape: [Batch, 2048, H/32, W/32]
 
-        Args:
-            x (torch.Tensor): Input tensor for frame of shape [Batch * Pair number, 3, H, W]
-
-        Returns:
-            tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]: 
-                Extracted multi-scale features for frame1 and frame2.
-                Each dict includes keys 'p3', 'p4', 'p5', 'p6'.
-                Each tensor has shape [Batch * Pair number, out_channels, H', W']
-        """
-        # Process frame1
-        c3 = self.backbone[5](self.backbone[0:5](x))   # [Batch, 512, H/8, W/8] -> C3
-        c4 = self.backbone[6](c3)                    # [Batch, 1024, H/16, W/16] -> C4
-        c5 = self.backbone[7](c4)                    # [Batch, 2048, H/32, W/32] -> C5
-
-        # Create OrderedDict for FPN input for frame1
-        input_features = OrderedDict()
-        input_features["c3"] = c3
-        input_features["c4"] = c4
-        input_features["c5"] = c5
-
-        # Pass through FPN for frame1
-        fpn_features = self.fpn(input_features)  # Dict with keys 'c3', 'c4', 'c5', 'pool'
-
-        # Rename keys to 'p3', 'p4', 'p5', 'p6' for frame1
-        fpn_features = {
-            'p3': fpn_features['c3'],
-            'p4': fpn_features['c4'],
-            'p5': fpn_features['c5'],
-            'p6': fpn_features['pool']
-        }
-
-        return fpn_features
+        # Return the multi-scale feature maps
+        return [c3, c4, c5, c5]
 
 class SingleLevelSpatialFeatureExtractor(nn.Module):
     def __init__(self, pretrained=True, out_channels=2048):
@@ -124,7 +87,7 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
         if not pretrained:
             resnet.eval()
         
-        # Extract layers up to the specified layer
+        # Extract layers up to the specified layer  
         layers = []
         for name, module in resnet.named_children():
             layers.append(module)
@@ -150,12 +113,12 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
 def create_positional_encoding(feature):
     """
     Args:
-        feature(tensor): (num_feature_level, B, C, H, W)
+        feature(tensor): (B, C, H, W)
     Returns:
         Tensor: Positional encoding of the same shape as the input feature
     """
     # Get the last three dimensions (C, H, W) from the input
-    num_feature_level, batch_size, channels, height, width = feature.size()
+    batch_size, channels, height, width = feature.size()
 
     device = feature.device
     batch_size = feature.size(0)  # Handle batch size dynamically
@@ -163,7 +126,7 @@ def create_positional_encoding(feature):
         raise ValueError("Channels must be divisible by 4 for 2D positional encoding.")
 
     # Create an empty tensor for positional encoding with the same batch size
-    pe = torch.zeros(num_feature_level, batch_size, channels, height, width, device=device)
+    pe = torch.zeros(batch_size, channels, height, width, device=device)
 
     # Create y and x embeddings
     y_embed = torch.linspace(0, 1, steps=height).unsqueeze(1).repeat(1, width)
@@ -180,19 +143,21 @@ def create_positional_encoding(feature):
     pe_cos_y = torch.cos(y_embed.unsqueeze(0) * div_term.unsqueeze(1).unsqueeze(2))  # [C//4, H, W]
 
     # Assign the positional encodings to the positional encoding tensor
-    pe[:, :, 0::4, :, :] = pe_sin
-    pe[:, :, 1::4, :, :] = pe_cos
-    pe[:, :, 2::4, :, :] = pe_sin_y
-    pe[:, :, 3::4, :, :] = pe_cos_y
+    pe[:, 0::4, :, :] = pe_sin
+    pe[:, 1::4, :, :] = pe_cos
+    pe[:, 2::4, :, :] = pe_sin_y
+    pe[:, 3::4, :, :] = pe_cos_y
 
     return pe.to(device)
     
 
 
 class ChosenFeatureExtractor(nn.Module):
-    def __init__(self, choice, pretrained=True, out_channels=256):
+    def __init__(self, choice, pretrained=True, out_channels=256, num_feature_levels=4):
         super(ChosenFeatureExtractor, self).__init__()
         self.out_channels = out_channels
+        self.num_channels = [512, 1024, 2048]
+        self.num_backbone_outputs = num_feature_levels-1
         if choice == "multi":
             self.spatialExtractor = MultiLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels)
         elif choice == "single":
@@ -211,7 +176,7 @@ class ChosenFeatureExtractor(nn.Module):
 
 
 def build_backbone(args):
-    return ChosenFeatureExtractor(choice=args.backbone_choice, pretrained=args.backbone_pretrained, out_channels=args.backbone_out_channels).to(args.device)
+    return ChosenFeatureExtractor(choice=args.backbone_choice, pretrained=args.backbone_pretrained, out_channels=args.backbone_out_channels, num_feature_levels=args.num_feature_levels).to(args.device)
 
     
 

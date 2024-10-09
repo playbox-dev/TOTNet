@@ -161,7 +161,7 @@ def get_events_infor(game_list, configs, dataset_type):
 
 def get_all_detection_infor(game_list, configs, dataset_type):
     num_frames_from_event = int((configs.num_frames_sequence - 1) / 2)
-
+    
     annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
     images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
     events_infor = []

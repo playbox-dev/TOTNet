@@ -38,25 +38,26 @@ class DeformableBallDetection(nn.Module):
         self.bbox_embed = MLP(self.hidden_dim, self.hidden_dim, 4, 3)
         self.coordinates_embed = nn.Linear(self.hidden_dim, 2)
         self.num_feature_levels = num_feature_levels
+        self.sigmoid = nn.Sigmoid()
         
         # Feature extractor layers here...
-        self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[0])  # Predicts x-coordinate
-        self.fc_y = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts y-coordinate
+        self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts x-coordinate
+        self.fc_y = nn.Linear(in_features=self.hidden_dim, out_features=img_size[0])  # Predicts y-coordinate
         self.fc = nn.Linear(in_features=self.hidden_dim, out_features=2)  # where `aggregated_features_dim` is the hidden dimension size
 
         # set query embeddings
         self.query_embed = nn.Embedding(num_queries, self.hidden_dim*2)
+        self.backbone = backbone
         # set input projection
         if num_feature_levels > 1:
-            num_backbone_outs = len(backbone.strides)
             input_proj_list = []
-            for _ in range(num_backbone_outs):
+            for _ in range(backbone.num_backbone_outputs):
                 in_channels = backbone.num_channels[_]
                 input_proj_list.append(nn.Sequential(
                     nn.Conv2d(in_channels, self.hidden_dim, kernel_size=1),
                     nn.GroupNorm(32, self.hidden_dim),
                 ))
-            for _ in range(num_feature_levels - num_backbone_outs):
+            for _ in range(num_feature_levels - backbone.num_backbone_outputs):
                 input_proj_list.append(nn.Sequential(
                     nn.Conv2d(in_channels, self.hidden_dim, kernel_size=3, stride=2, padding=1),
                     nn.GroupNorm(32, self.hidden_dim),
@@ -64,9 +65,15 @@ class DeformableBallDetection(nn.Module):
                 in_channels = self.hidden_dim
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj = Projection(backbone_numchannels=backbone.out_channels, hidden_dim=self.hidden_dim)
+            self.input_proj = nn.ModuleList([nn.Sequential(
+                nn.Conv2d(backbone.out_channels, self.hidden_dim, kernel_size=1),
+                nn.GroupNorm(32, self.hidden_dim),
+            )])
         
-        self.backbone = backbone
+        for proj in self.input_proj:
+            nn.init.xavier_uniform_(proj[0].weight, gain=1)
+            nn.init.constant_(proj[0].bias, 0)
+        
 
         # init constant bbox embedding layer 
         prior_prob = 0.01
@@ -96,39 +103,54 @@ class DeformableBallDetection(nn.Module):
         B, N, C, H, W = samples.shape
         samples = samples.view(B*N, C, H, W)
         features = self.backbone(samples) # Expect it to output feature map
-        # expected shape is [num_feature_level, B, C, H, W]
-
         srcs = []
         masks = []
+        poses = []
         for l, feat in enumerate(features):
-            projected_feature = self.input_proj(feat)
+            projected_feature = self.input_proj[l](feat)
             srcs.append(projected_feature)
             # all regions are valid so all pixels are 0 
             mask = torch.zeros((B*N, *projected_feature.shape[-2:]), dtype=torch.bool, device=projected_feature.device)
             masks.append(mask)
+            pos = create_positional_encoding(projected_feature)
+            poses.append(pos)
 
         query_embeds = self.query_embed.weight
 
-        srcs = torch.cat(srcs, 1).unsqueeze(0)
-        masks = torch.cat(masks, 1).unsqueeze(0)
-        pos = create_positional_encoding(srcs)
         # Regarding transformer 
         # print(srcs.shape, masks.shape, pos.shape, query_embeds.shape)
-        hs, init_reference, inter_references = self.transformer(srcs, masks, pos, query_embeds)
-        hs_reshaped = hs.view(B, N, self.num_queries*self.hidden_dim)
+        hs, init_reference, inter_references = self.transformer(srcs, masks, poses, query_embeds) # shape for hs is [B*N, number of queries, hidden dimension]
+        hs_reshaped = hs.view(B, N, self.num_queries, self.hidden_dim)
         # print(hs_reshaped.shape, init_reference.shape, inter_references.shape) #shape is torch.Size([B, N, 512]) torch.Size([7, 1, 2]) torch.Size([7, 1, 2])
-    
-        aggregated_features = hs_reshaped.mean(dim=1) # shape is [B, 512]
-        # print(aggregated_features.shape) # Expected shape 
-        # Predict the offsets for the coordinates using the decoder output (hs)
-        # refined_coords = self.coordinates_embed(aggregated_features)  # Shape: [B, 2]
 
-        # Pass through the final fully connected layer to produce logits for both coordinates
-        x_coord = self.fc_x(aggregated_features)  # [B, 1]
-        y_coord = self.fc_y(aggregated_features)  # [B, 1]
-        output_coords_logits = torch.cat([x_coord, y_coord], dim=1)
-      
-        return output_coords_logits
+        hs_mean_frames = hs_reshaped.mean(dim=1)  # Shape [B, num_queries, hidden_dim]
+
+        # Pass through the fully connected layers to produce logits for x and y coordinates
+        x_coord_logits = self.fc_x(hs_mean_frames)  # [B, num_queries, w]
+        y_coord_logits = self.fc_y(hs_mean_frames)  # [B, num_queries, h]
+
+        # Option 1: Use maximum logit value as confidence
+        x_max_logits, _ = torch.max(x_coord_logits, dim=-1)  # [B, num_queries]
+        y_max_logits, _ = torch.max(y_coord_logits, dim=-1)  # [B, num_queries]
+        confidence_scores = x_max_logits + y_max_logits      # [B, num_queries]
+
+        # Get the index of the most confident query for each sample
+        best_query_indices = torch.argmax(confidence_scores, dim=1)  # [B]
+
+        batch_indices = torch.arange(B, device=hs.device)  # Ensure device matches
+        # Index into x_coord_logits and y_coord_logits to get the best predictions
+        x_coord_best = x_coord_logits[batch_indices, best_query_indices, :]  # [B, W]
+        y_coord_best = y_coord_logits[batch_indices, best_query_indices, :]  # [B, H]
+
+
+        # Option 2: If treating outputs as binary logits per coordinate, use sigmoid
+        x_coord_probs = torch.sigmoid(x_coord_best)          # [B, W]
+        y_coord_probs = torch.sigmoid(y_coord_best)          # [B, H]
+                
+        # Output the most confident coordinates
+        output = (x_coord_probs, y_coord_probs)
+
+        return output
 
 
 

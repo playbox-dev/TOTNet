@@ -4,6 +4,7 @@ import datetime
 import os
 import sys
 from easydict import EasyDict as edict
+from utils.misc import make_folder
 
 
 def parse_configs():
@@ -38,7 +39,10 @@ def parse_configs():
                         help='frequency of saving checkpoints (default: 2)')
     parser.add_argument('--earlystop_patience', type=int, default=None, metavar='N',
                         help='Early stopping the training process if performance is not improved within this value')
-    
+    parser.add_argument('--save_test_output', action='store_true',
+                        help='If true, the image of testing phase will be saved')
+    parser.add_argument('--pretrained_path', type=str, default=None, metavar='PATH',
+                        help='the path of the pretrained checkpoint')
     ### build backbone network
     parser.add_argument('--backbone_choice', type=str, default="single",
                         help="single means single feature map, multi for multi level feature map")
@@ -58,6 +62,18 @@ def parse_configs():
                         help="number of classes expected in detector")
     parser.add_argument('--num_queries', type=int, default=1,
                         help="numebr of queries in the transformer")
+    
+    ####################################################################
+    ##############     Demonstration configurations     ###################
+    ####################################################################
+    parser.add_argument('--video_path', type=str, default=None, metavar='PATH',
+                        help='the path of the video that needs to demo')
+    parser.add_argument('--output_format', type=str, default='text', metavar='PATH',
+                        help='the type of the demo output')
+    parser.add_argument('--show_image', action='store_true',
+                        help='If true, show the image during demostration')
+    parser.add_argument('--save_demo_output', action='store_true',
+                        help='If true, the image of demonstration phase will be saved')
     
 
     ####################################################################
@@ -90,7 +106,7 @@ def parse_configs():
         '--img_size', 
         type=int, 
         nargs=2,  # This makes sure two integers are provided (for width and height)
-        metavar=('width', 'height'),
+        metavar=('height', 'wdith'),
         default=(270, 480),
         help="Specify the new image size as width and height (e.g., --img_size 540 960)"
     )
@@ -127,8 +143,8 @@ def parse_configs():
 
     configs.pin_memory = True
 
-    configs.org_size = (1920, 1080)
-    configs.num_frames_sequence = 9
+    configs.org_size = (1080, 1920)
+    configs.num_frames_sequence = 1
 
     configs.results_dir = os.path.join(configs.working_dir, 'results')
     configs.logs_dir = os.path.join(configs.working_dir, 'logs', configs.saved_fn)
@@ -151,6 +167,20 @@ def parse_configs():
         'bounce': 1.,
         'net': 3.,
     }
+
+
+    make_folder(configs.checkpoints_dir)
+    make_folder(configs.logs_dir)
+    make_folder(configs.results_dir)
+
+    if configs.save_test_output:
+        configs.saved_dir = os.path.join(configs.results_dir, configs.saved_fn)
+        make_folder(configs.saved_dir)
+
+    if configs.save_demo_output:
+        configs.save_demo_dir = os.path.join(configs.results_dir, 'demo', configs.saved_fn)
+        make_folder(configs.save_demo_dir)
+
 
     return configs
 

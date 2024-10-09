@@ -56,10 +56,12 @@ class Transformer(nn.Module):
         """
         forward function for the transformer
         Args:
-            srcs(tensor): [lvl, B*P, hidden_dimension, H, W]
-            masks(tensor): [lvl, B*P, H, W]
-            pos_embeds(tensor): [lvl, 1, hidden_dimension, H, W]
+            srcs(list): [lvl, B*P, hidden_dimension, H, W]
+            masks(list): [lvl, B*P, H, W]
+            pos_embeds(list): [lvl, 1, hidden_dimension, H, W]
             query_embed(tensor): [num_queries, hidden_dimension]
+        Return: 
+            hs(tensor): hidden state in shape [B*P, number of queries, hidden_dimension]
         """
         assert query_embed is not None, "query_embedding is none"
    
@@ -335,7 +337,8 @@ def get_valid_ratio(mask):
 
 
 def build_transformer(args):
-    transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, num_feature_levels=args.num_feature_levels).to(args.device)
+    transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, 
+                              num_feature_levels=args.num_feature_levels).to(args.device)
     return transformer
 
 if __name__ == '__main__':

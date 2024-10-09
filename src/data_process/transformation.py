@@ -155,3 +155,23 @@ class Random_HFlip(object):
             ball_position_xy[0] = w - ball_position_xy[0]
 
         return transformed_imgs, ball_position_xy
+
+
+class Random_VFlip(object):
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, imgs, ball_position_xy):
+        transformed_imgs = imgs.copy()
+        if random.random() <= self.p:
+            h, w, c = imgs[0].shape
+            transformed_imgs = []
+            for img in imgs:
+                # Horizontal flip a sequence of imgs
+                transformed_img = cv2.flip(img, 0)
+                transformed_imgs.append(transformed_img)
+
+            # Adjust ball position: Same x, new y = h - y
+            ball_position_xy[1] = h - ball_position_xy[1]
+
+        return transformed_imgs, ball_position_xy
