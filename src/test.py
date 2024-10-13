@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 sys.path.append('./')
 
-from data_process.dataloader import create_test_dataloader, create_normal_test_dataloader
+from data_process.dataloader import create_test_dataloader, create_normal_test_dataloader, create_masked_test_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
 from model.deformable_detection_model import build_detector
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse
@@ -72,7 +72,8 @@ def main_worker(gpu_idx, configs):
     if configs.pretrained_path is not None:
         model = load_pretrained_model(model, configs.pretrained_path, gpu_idx)
     # Load dataset
-    test_loader = create_normal_test_dataloader(configs)
+    # test_loader = create_normal_test_dataloader(configs)
+    test_loader = create_masked_test_dataloader(configs)
     test(test_loader, model, configs)
 
 

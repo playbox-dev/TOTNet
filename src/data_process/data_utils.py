@@ -97,8 +97,7 @@ def get_events_infor(game_list, configs, dataset_type):
     ]
     """
     # the paper mentioned 25, but used 9 frames only
-    num_frames_from_event = int((configs.num_frames_sequence - 1) / 2)
-
+    num_frames_from_event = int((configs.num_frames - 1) / 2)
 
     annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
     images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
@@ -160,7 +159,7 @@ def get_events_infor(game_list, configs, dataset_type):
 
 
 def get_all_detection_infor(game_list, configs, dataset_type):
-    num_frames_from_event = int((configs.num_frames_sequence - 1) / 2)
+    num_frames_from_event = int((configs.num_frames - 1) / 2)
     
     annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
     images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
@@ -193,7 +192,7 @@ def get_all_detection_infor(game_list, configs, dataset_type):
 
             events_infor.append(img_path_list)
             events_labels.append(ball_position_xy)
-
+        
     return events_infor, events_labels
 
 

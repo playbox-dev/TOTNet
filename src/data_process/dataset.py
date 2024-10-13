@@ -144,7 +144,12 @@ class Normal_Dataset(Dataset):
         # stack them to form the shape (1,num_frames, C, H, W)
         # numpy_imgs = np.stack(converted_imgs, axis=0)  # Stack along the new axis (N)
         # convert them into pairs formation
+        # add a padded frame so the number is equal and can be processed with, only when the images is in odd length
         image_list=[]
+        if len(converted_imgs)//2 != 0:
+            pad_frame = np.zeros((img.shape[0], img.shape[1], img.shape[2]), dtype=img.dtype)
+            image_list.append(pad_frame)
+
         masked_frameid = len(converted_imgs)//2 
         i = 0
         while i < len(converted_imgs):

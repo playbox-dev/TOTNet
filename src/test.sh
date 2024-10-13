@@ -5,10 +5,11 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_train_540_960_single' \
+  --saved_fn 'mutli_frames_masked_train_270_480_single' \
   --gpu_idx 0   \
   --num_queries 50    \
   --batch_size 32    \
-  --img_size 540 960    \
-  --pretrained_path ../checkpoints/normal_train_540_960_single/normal_train_540_960_single_best.pth \
+  --img_size 270 480    \
+  --num_frames 9  \
+  --pretrained_path ../checkpoints/mutli_frames_masked_train_270_480_single/mutli_frames_masked_train_270_480_single_best.pth \
 

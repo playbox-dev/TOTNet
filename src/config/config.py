@@ -79,7 +79,8 @@ def parse_configs():
     ####################################################################
     ##############     Training strategy            ###################
     ####################################################################
-
+    parser.add_argument('--num_frames', type=int, default=9, metavar='N',
+                        help='number of frames into model')
     parser.add_argument('--start_epoch', type=int, default=1, metavar='N',
                         help='the starting epoch')
     parser.add_argument('--num_epochs', type=int, default=30, metavar='N',
@@ -144,7 +145,6 @@ def parse_configs():
     configs.pin_memory = True
 
     configs.org_size = (1080, 1920)
-    configs.num_frames_sequence = 1
 
     configs.results_dir = os.path.join(configs.working_dir, 'results')
     configs.logs_dir = os.path.join(configs.working_dir, 'logs', configs.saved_fn)

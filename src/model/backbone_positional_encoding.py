@@ -41,9 +41,9 @@ class MultiLevelSpatialFeatureExtractor(nn.Module):
         self.num_channels = [512, 1024, 2048]
 
        
-        # Freeze backbone if not training
-        for param in self.backbone.parameters():
-            param.requires_grad = False
+        # # Freeze backbone if not training
+        # for param in self.backbone.parameters():
+        #     param.requires_grad = False
 
     def forward(self, x):
         # Forward pass through the ResNet backbone
@@ -82,10 +82,6 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
         
         # Load pre-trained ResNet-50
         resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT if pretrained else None)
-        
-        # Set to evaluation mode if not training (optional)
-        if not pretrained:
-            resnet.eval()
         
         # Extract layers up to the specified layer  
         layers = []

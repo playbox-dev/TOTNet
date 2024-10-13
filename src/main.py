@@ -108,8 +108,8 @@ def main_worker(gpu_idx, configs):
     if logger is not None:
         logger.info(">>> Loading dataset & getting dataloader...")
     # Create dataloader, option with normal data
-    # train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
-    train_loader, val_loader, train_sampler = create_normal_train_val_dataloader(configs)
+    train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
+    # train_loader, val_loader, train_sampler = create_normal_train_val_dataloader(configs)
     test_loader = create_masked_test_dataloader(configs)
 
     # Print the number of samples for this GPU/worker
@@ -205,7 +205,6 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
         batch_data = batch_data.to(configs.device)
         labels = labels.to(configs.device)
         labels = labels.float()
-
         output_coords = model(batch_data.float()) # output in shape ([B,W],[B,H]) if output heatmap
         total_loss = loss_func(output_coords, labels)
 

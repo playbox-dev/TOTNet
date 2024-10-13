@@ -71,6 +71,7 @@ def create_masked_train_val_dataloader(configs, subset_size=None):
         Resize(new_size=configs.img_size, p=1.0),
         Random_Crop(max_reduction_percent=0.15, p=0.5),
         Random_HFlip(p=0.5),
+        Random_VFlip(p=0.5),
         Random_Rotate(rotation_angle_limit=10, p=0.5),
     ], p=1.)
 
@@ -209,7 +210,7 @@ def create_normal_test_dataloader(configs):
     if configs.distributed:
         test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
     test_dataloader = DataLoader(test_dataset, batch_size=configs.batch_size, shuffle=False,
-                                 pin_memory=configs.pin_memory, num_workers=configs.num_workers, sampler=test_sampler)
+                                 pin_memory=configs.pin_memory, num_workers=configs.num_workers, sampler=test_sampler, drop_last=True)
 
     return test_dataloader
 
