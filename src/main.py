@@ -9,7 +9,8 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 
 from tqdm import tqdm
-from model.deformable_detection_model import build_detector
+# from model.deformable_detection_model import build_detector
+from model.propose_model import build_detector
 from model.model_utils import make_data_parallel, get_num_parameters, post_process
 from losses_metrics.losses import Heatmap_Ball_Detection_Loss
 from losses_metrics.metrics import heatmap_calculate_metrics
@@ -17,9 +18,11 @@ from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float
 from utils.misc import AverageMeter, ProgressMeter, print_gpu_memory_usage
-from data_process.dataloader import create_masked_train_val_dataloader, create_train_val_dataloader, create_masked_test_dataloader, create_test_dataloader, create_normal_train_val_dataloader
+from data_process.dataloader import create_masked_train_val_dataloader, create_masked_test_dataloader, create_occlusion_train_val_dataloader, create_occlusion_test_dataloader
 from torch.utils.tensorboard import SummaryWriter
 
+
+torch.autograd.set_detect_anomaly(True)
 
 def main():
     configs = parse_configs()
@@ -109,7 +112,6 @@ def main_worker(gpu_idx, configs):
         logger.info(">>> Loading dataset & getting dataloader...")
     # Create dataloader, option with normal data
     train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
-    # train_loader, val_loader, train_sampler = create_normal_train_val_dataloader(configs)
     test_loader = create_masked_test_dataloader(configs)
 
     # Print the number of samples for this GPU/worker
@@ -170,8 +172,10 @@ def main_worker(gpu_idx, configs):
                 logger.info(print_string)
         # Adjust learning rate
         if configs.lr_type == 'plateau':
-            assert (not configs.no_val), "Only use plateau when having validation set"
-            lr_scheduler.step(val_loss)
+            if configs.no_val:
+                lr_scheduler.step(test_loss)
+            else:
+                lr_scheduler.step(val_loss)
         else:
             lr_scheduler.step()
 

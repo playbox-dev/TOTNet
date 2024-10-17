@@ -1,40 +1,62 @@
 import torch
 import torch.nn as nn
 import sys
+import cv2 
 
 sys.path.append('../')
 from model.backbone_positional_encoding import ChosenFeatureExtractor
 
 class MotionModel(nn.Module):
-    def __init__(self, channels=2048, pretrained=True):
+    def __init__(self, num_output_channels, num_input_channels=3):
         super(MotionModel, self).__init__()
-        self.spatial_extractor = ChosenFeatureExtractor(choice="single", pretrained=pretrained, out_channels=channels)
-        # Fusion module to combine spatial and motion features
-        # Using a 1x1 convolution to reduce concatenated channels back to 2048
-        self.fusion_module = nn.Conv2d(channels * 3, channels, kernel_size=1)
-    
-    def forward(self, frame1, frame2):
-        # Extract spatial features
-        frame1 = frame1.float()
-        frame2 = frame2.float()
-        features_frame1 = self.spatial_extractor(frame1)  # [B*7, 2048, 34, 60]
-        features_frame2 = self.spatial_extractor(frame2)  # [B*7, 2048, 34, 60]
-    
-        # Compute motion features via feature difference
-        motion_features = features_frame2 - features_frame1  # [B*7, 2048, 34, 60]
-    
-        # Fuse features by concatenation
-        fused_features = torch.cat((features_frame1, features_frame2, motion_features), dim=1)  # [B*7, 6144, 34, 60]
-    
-        # Apply fusion module to reduce channels back to 2048
-        fused_features = self.fusion_module(fused_features)  # [B*7, 2048, 34, 60]
 
-        # Stack the three feature maps
-        # Shape: [B*7, 3, 2048, 34, 60]
-        stacked_features = torch.stack((features_frame1, features_frame2, motion_features), dim=1)  # [B*7, 3, 2048, 34, 60]
-    
-        return stacked_features  # [B*7, 3, 2048, 34, 60]
+        # First set of convolutional layers for aggressive downsampling
+        self.conv = nn.Sequential(
+            nn.Conv2d(num_input_channels, 512, kernel_size=3, stride=2, padding=1),  # Downsample H, W by 2
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1),  # Further downsample H, W by 2
+            nn.BatchNorm2d(1024),
+            nn.ReLU(),
+            nn.Conv2d(1024, 2048, kernel_size=3, stride=2, padding=1),  # Downsample to H/8, W/8
+            nn.BatchNorm2d(2048),
+            nn.ReLU(),
+            nn.Conv2d(2048, num_output_channels, kernel_size=3, stride=2, padding=1),  # Further downsample
+            nn.BatchNorm2d(num_output_channels),
+            nn.ReLU()
+        )
 
+        # Final convolution to ensure the output is exactly (9, 15)
+        self.final_conv = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=3, stride=2, padding=1)
+    
+    
+    
+    def forward(self, x):
+        """_summary_
+
+        Args:
+            x (tensor): shape [Bs, N, C, H, W], where N is the number of frames in the sequence
+
+        Returns:
+            tensor: _description_
+        """
+        motion_features = []
+        
+        # Loop through consecutive frames and compute absolute difference
+        for i in range(x.size(1) - 1):  # size(1) is N (number of frames)
+            motion_difference = torch.abs(x[:, i] - x[:, i + 1])  # Compute frame difference
+            downsampled_motion = self.conv(motion_difference)
+            final_motion_features = self.final_conv(downsampled_motion)
+            motion_features.append(final_motion_features)
+        
+        # Stack the motion features to create a tensor of shape [Bs, N-1, C, H, W]
+        motion_features = torch.stack(motion_features, dim=1)
+        
+        return motion_features
+
+def build_motion_model(args):
+    motion_model = MotionModel(num_output_channels=args.backbone_out_channels)
+    return motion_model
 
 # Sample Visualization Function (Optional)
 def visualize_feature_maps(features_frame1, features_frame2, motion_features, save_dir='visualizations'):
@@ -74,44 +96,21 @@ def visualize_feature_maps(features_frame1, features_frame2, motion_features, sa
 
 if __name__ == '__main__':
     from config.config import parse_configs
-    from data_process.dataloader import create_train_val_dataloader
+    from data_process.dataloader import create_masked_train_val_dataloader
 
     configs = parse_configs()
     # Create dataloaders
-    train_dataloader, val_dataloader, train_sampler = create_train_val_dataloader(configs)
+    train_dataloader, val_dataloader, train_sampler = create_masked_train_val_dataloader(configs)
     batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader))
 
-    B, num_pairs, num_images, C, H, W = batch_data.shape
-    data_reshaped = batch_data.view(B * num_pairs, num_images, C, H, W)
-    
-    # Split into frame1 and frame2
-    frame1 = data_reshaped[:, 0, :, :, :]  # [B*num_pairs, C, H, W]
-    frame2 = data_reshaped[:, 1, :, :, :]  # [B*num_pairs, C, H, W]
-    print(f"batch_data shape {batch_data.shape}, frame1 shape {frame1.shape}, frame2 shape {frame2.shape}")
+    B, N, C, H, W = batch_data.shape
 
-    # # Create dummy input frames
-    # batch_size = 2
-    # pair_number = 7
-    # stacked_input = torch.randn(batch_size, pair_number, 2, 3, 1080, 1920)
-    # B, num_pairs, num_images, C, H, W = stacked_input .shape
-    # data_reshaped = stacked_input.view(B * num_pairs, num_images, C, H, W)
-    # frame1 = data_reshaped[:, 0, :, :, :]  # [B*num_pairs, C, H, W]
-    # frame2 = data_reshaped[:, 1, :, :, :]  # [B*num_pairs, C, H, W]
-
-
-    # Instantiate the MotionModel
-    height = 1080 // 32  # 34
-    width = 1920 // 32   # 60
-    motion_model = MotionModel(channels=2048, pretrained=True)
+    motion_model = MotionModel()
 
     #Forward pass through the backbone
     with torch.no_grad():  # Disable gradient computation for testing
-        stacked_features = motion_model(frame1, frame2)
+        motion_features = motion_model(batch_data)
     
     # Verify output shapes, the output shape is [B*P, 3, 2048, 34, 60] where B*P is batch and pair numbers, 3 means frame1, frame2 and motion feature
-    print(f"Features stacked_features Shape: {stacked_features.shape}")  # Expected: [B*P, 3, 2048, 34, 60]
-    # example_stacked = stacked_features[0]
-    # print(f"example stacked shape {example_stacked.shape}")
-    # example_feature_map1 = example_stacked[0]
-    # example_feature_map2 = example_stacked[1]
-    # motion_feature = example_stacked[2]
+    print(f"Features stacked_features Shape: {motion_features.shape}")  # Expected: [B*P, 3, 2048, 34, 60]
+

@@ -4,4 +4,6 @@
 #SBATCH --job-name=August
 
 
-python deformable_detection_model.py
+# python temporal_transformer.py
+python propose_model.py
+# python temporal_model.py

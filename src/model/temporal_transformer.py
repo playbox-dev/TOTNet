@@ -8,20 +8,26 @@ from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 sys.path.append('../')
 from model.ops.modules.ms_deform_attn import DeformAttn
 from model.backbone_positional_encoding import create_positional_encoding
+from model.temporal_model import ConvLSTM_Model
 from utils.misc import inverse_sigmoid
 
 class Transformer(nn.Module):
     def __init__(self, channels=2048, d_model=512, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, 
-                 dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4):
+                 dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4, num_frames=8, batch_size=8):
         super(Transformer, self).__init__()
 
         self.d_model = d_model
         self.nhead = nhead
+        self.num_frames = num_frames
+        self.batch_size = torch.tensor(batch_size//2, dtype=torch.int32)
         self.embedder_layer = nn.Linear(channels, d_model)
         encoder_layer = EncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
         self.encoder = Encoder(encoder_layer, num_encoder_layers)
+
+        # temporal model
+        self.temporal_model = ConvLSTM_Model(input_channels=512, hidden_channels=[512, 512, 512], output_channels=512, num_layers=3)
 
         decoder_layer = DecoderLayer(d_model=d_model, d_ffn=dim_feedforward, 
                                      dropout=dropout, activation=activation, n_levels=num_feature_levels, n_heads=nhead, n_points=enc_n_points)
@@ -69,7 +75,7 @@ class Transformer(nn.Module):
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-
+        
         for lvl, (src, mask, pos_embed) in enumerate(zip(srcs, masks, pos_embeds)):
             bs, c, h, w = src.shape
             spatial_shape = (h, w)
@@ -88,27 +94,29 @@ class Transformer(nn.Module):
         level_start_index = torch.cat((spatial_shapes.new_zeros((1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(mask) for mask in masks], dim=1)  # Correct stacking over batch size
         
-
-        # encoder
         # src_flatten.shape [B*N, C, Hidden_dimension], spatial_shapes shape [num_feature_level, 2] lvl_pos_embed_flatten.shape [1, C, Hidden_dimension]
-        # put mask_flatten = None since we dont have anything masked
-        # Now since the defomrable encoder takes in a single image each time to produce the outcome, but ours is with each batch it contains 8 frames but just produce
-        # one output, which is different with originally 1 batch with 1 image produce 1 output, so we need to change it 
-        # so the problem in the encoder 
         
         mask_flatten = None 
+        # memory shape [B*N, H*W, d_model]
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
 
         bs, _, c = memory.shape
-        print(memory.shape)
-        exit()
+        # print(f"memory shape is {memory.shape}")
+        B, N = self.batch_size, self.num_frames
+        memory = memory.view(B, N, h, w, c)
+        
+        temporal_spatial_output = self.temporal_model(memory) # shape [B*N, H*W, C]
+        
+
         query_embed, tgt = torch.split(query_embed, c, dim=1)
-        query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-        tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
+        query_embed = query_embed.unsqueeze(0).expand(B, -1, -1)
+        tgt = tgt.unsqueeze(0).expand(B, -1, -1)
         reference_points = self.reference_points(query_embed).sigmoid()
         init_reference_out = reference_points
-
-        hs, inter_references = self.decoder(tgt, reference_points, memory,
+        valid_ratios = valid_ratios[B, ...]
+        # print(f"""temporal_spatial_output shape is {temporal_spatial_output.shape}, tgt shape {tgt.shape}, 
+            #   reference_points shape {reference_points.shape}, query_embed shape {query_embed.shape}, valid_rations {valid_ratios.shape}""")
+        hs, inter_references = self.decoder(tgt, reference_points, temporal_spatial_output,
                                             spatial_shapes, level_start_index, valid_ratios, query_embed, mask_flatten)
         
         inter_references_out = inter_references
@@ -339,93 +347,22 @@ def get_valid_ratio(mask):
 
 def build_transformer(args):
     transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, 
-                              num_feature_levels=args.num_feature_levels).to(args.device)
+                              num_feature_levels=args.num_feature_levels, num_frames=args.num_frames-1, batch_size=args.batch_size).to(args.device)
     return transformer
 
+
 if __name__ == '__main__':
+    from config.config import parse_configs
+    from data_process.dataloader import create_masked_train_val_dataloader
+    device = 'cuda'
+    configs = parse_configs()
 
 
-    # Create dummy input from motion models B*P, 3, 2048, 34, 60, where 3 channles means frame 1, frame 2, and motion feature
-    batch_size = 2
-    pair_number = 7
-    backbone_numchannels = 2048
-    hidden_dim = 512
-    device = torch.device('cuda')  # or 'cuda' if using GPU
+    transformer=build_transformer(configs)
+    dummy_input = [torch.randn([64, 512, 9, 15], device=device, dtype=torch.float32)]
+    masks = [torch.zeros([64, 9, 15], device=device, dtype=torch.int)]
+    pos_embedding = [torch.randn([64, 512, 9, 15], device=device, dtype=torch.float32)]
+    query_embedding = torch.randn([1, 1024], device=device, dtype=torch.float32)
 
-    # stacked_features = torch.randn(batch_size * pair_number, 3, 2048, 34, 60)  # [Batch * Pair number, 3, H, W]
-    # frame1 = stacked_features[:,0,:,:,:].to(device)
-    # frame2 = stacked_features[:,1,:,:,:].to(device)
-    # motionFeature = stacked_features[:,2,:,:,:].to(device)
-
-    # # backbone numchannels = 2048, hidden_dim = d_model of transformer = 512
-    # input_proj = Projection(backbone_numchannels, hidden_dim).to(device)
-    
-    # # The purpose of this projection is to reduce the number of channels for efficiency, the 1x1 conv also preserve spatial dimensions, also normalize 
-    # projected_frame1 = input_proj(frame1).to(device)
-    # projected_frame2 = input_proj(frame2).to(device)
-
-    # # Expected output [Batch * Pair number, hidden_dim, 34, 60]
-    # print(f"frame1 flatten shape {projected_frame1.shape}, frame2 flatten shape {projected_frame2.shape}")
-
-    # # To make it able to put in encoder, also need to flatten it to 1D
-    # projected_frame1_1d = projected_frame1.flatten(2).transpose(1,2) # flatten from position 2 which means H*W then transpose 1 to 2, Expected output [B*P, 34*60, C]
-
-    # positional_encoding = create_positional_encoding(projected_frame1).to(device)
-    # positioned_encoding = positional_encoding.flatten(2).transpose(1,2).to(device) # Expected Shape [1, 34*60, C]
-
-    # print(f"projected_frame1_1d shape {projected_frame1_1d.shape}, positioned_encoding shape {positioned_encoding.shape}")
-
-    spatial_shapes = [(34, 60)]
-    spatial_shapes_tensor = torch.tensor(spatial_shapes, dtype=torch.int64, device=device)
-    input_level_start_index = torch.tensor(1, device=device)
-    num_levels = 1
-
-    # mask = torch.ones((batch_size, 34, 60), dtype=torch.int32, device=device)
-    # valid_ratios = get_valid_ratio(mask)
-    valid_ratios = torch.ones((batch_size*pair_number,1,2), dtype=torch.int32, device=device)
-
-    # encoder_layer = EncoderLayer(d_model=hidden_dim, n_levels=1).to(device)
-    # encoder = Encoder(encoder_layer=encoder_layer, num_layers=6).to(device)
-
-    # output = encoder(projected_frame1_1d, spatial_shapes_tensor, input_level_start_index, valid_ratios, pos=positioned_encoding)
-    # print(output.shape) # shape [14, 2040, 512]
-
-
-
-    # To test decoder, the expected input is tgt, reference_points, src, src_spatial_shapes
-    # src_level_start_index, src_valid_ratios, query_pos=None, src_padding_mask=None
-    # tgt and query_pos are splited from the query_embedding, query embeddings is a learnable parameter which is generated by 
-    num_queries = 10
-    encoder_output = torch.randn(batch_size*pair_number, 2040, 512).to(device)
-    bs, _, c = encoder_output.shape # memory.shape # memory is the output of the encoder which is in shape [B*P, H*W, C]
-    query_embed = nn.Embedding(num_queries, hidden_dim*2).to(device)
-    query_embeds = query_embed.weight
-    # query_embed, tgt = torch.split(query_embeds, c, dim=1)
-    # print(query_embed.shape, tgt.shape, query_embeds.shape)
-
-    # # reference_points in decoder is predicted as well 
-    # query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-    # tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
-    # reference_points_layer = nn.Linear(hidden_dim, 2).to(device)
-    # reference_points = reference_points_layer(query_embed).sigmoid().to(device)
-    # print(query_embed.shape, reference_points.shape)
-
-    # decoder_layer = DecoderLayer(d_model=hidden_dim, d_ffn=1024, n_levels=1).to(device)
-    # decoder = Decoder(decoder_layer, num_layers=6).to(device)
-
-    # output, reference_points = decoder(tgt, reference_points, encoder_output, spatial_shapes_tensor, input_level_start_index, valid_ratios, query_embed)
-    # print(f"decoder output {output.shape}, reference_points {reference_points.shape}")
-
-
-    transformer = Transformer(channels=backbone_numchannels, d_model=hidden_dim, nhead=8, num_encoder_layers=6, 
-                              num_decoder_layers=6, dim_feedforward=2048, dropout=0.1, activation="relu", num_feature_levels=1, enc_n_points=4).to(device)
-    
-    dummy_input = torch.randn(num_levels, batch_size*pair_number, hidden_dim, 34, 60).to(device) # represents one frame after projection which reduce the original channel to hidden_dim
-    masks = torch.ones((num_levels, batch_size*pair_number, 34, 60), dtype=torch.int32, device=device)
-    positional_encoding = create_positional_encoding(dummy_input).to(device)
-
-    hs, init_reference_out, inter_references_out= transformer(dummy_input, masks, positional_encoding, query_embeds)
-
-    print(hs.shape, init_reference_out.shape, inter_references_out.shape)
-
-    
+    output, _, _ = transformer(dummy_input, masks, pos_embedding, query_embedding)
+    print(f"final output shape {output.shape}")

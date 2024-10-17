@@ -2,6 +2,7 @@ import random
 
 import cv2
 import numpy as np
+import torchvision.transforms.functional as F
 
 
 class Compose(object):
@@ -175,3 +176,44 @@ class Random_VFlip(object):
             ball_position_xy[1] = h - ball_position_xy[1]
 
         return transformed_imgs, ball_position_xy
+
+
+class Random_Ball_Mask:
+    def __init__(self, mask_size=(20, 20), p=0.5):
+        """
+        Args:
+            mask_size (tuple): Height and width of the mask area (blackout area).
+            p (float): Probability of applying the mask.
+        """
+        self.mask_size = mask_size
+        self.p = p
+
+    def __call__(self, imgs, ball_position_xy):
+        """
+        Args:
+            imgs (tensor): Tensor of shape [N, C, H, W], where N is the number of frames.
+            ball_position_xy (tuple): (x, y) ball position for the labeled frame.
+
+        Returns:
+            masked_imgs: Tensor with the ball area masked in some frames.
+        """
+        H, W, C = imgs[0].shape  # Get height and width from a single image
+        mask_h, mask_w = self.mask_size
+
+        # Iterate over all frames and apply masking with some probability
+        for i, img in enumerate(imgs):
+            if random.random() < self.p:
+                # Slightly jitter the ball position to simulate slight movement
+                jitter_x = random.randint(-2, 2)
+                jitter_y = random.randint(-2, 2)
+                x = int(ball_position_xy[0] + jitter_x)
+                y = int(ball_position_xy[1] + jitter_y)
+
+                # Ensure the mask is within the image boundaries
+                top = max(0, min(H - mask_h, y - mask_h // 2))
+                left = max(0, min(W - mask_w, x - mask_w // 2))
+
+                # Apply the mask (set pixel values to 0)
+                img[top:top + mask_h, left:left + mask_w, :] = 0
+
+        return imgs, ball_position_xy

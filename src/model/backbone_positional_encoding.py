@@ -56,7 +56,7 @@ class MultiLevelSpatialFeatureExtractor(nn.Module):
         return [c3, c4, c5, c5]
 
 class SingleLevelSpatialFeatureExtractor(nn.Module):
-    def __init__(self, pretrained=True, out_channels=2048):
+    def __init__(self, pretrained=True, out_channels=2048, finetune=False):
         """
         Initializes the SingleLevelSpatialFeatureExtractor with ResNet-50 backbone.
         
@@ -82,7 +82,7 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
         
         # Load pre-trained ResNet-50
         resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT if pretrained else None)
-        
+
         # Extract layers up to the specified layer  
         layers = []
         for name, module in resnet.named_children():

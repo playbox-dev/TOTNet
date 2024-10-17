@@ -92,7 +92,7 @@ def test(test_loader, model, configs):
         start_time = time.time()
         for batch_idx, (batch_data, (masked_frameids, masked_frames, labels)) in enumerate(tqdm(test_loader)):
 
-            print('\n===================== batch_idx: {} ================================'.format(batch_idx))
+            print(f'\n===================== batch_idx: {batch_idx} ================================')
 
             data_time.update(time.time() - start_time)
             batch_size = batch_data.size(0)

@@ -25,7 +25,7 @@ def parse_configs():
                     help='The size of validation set')
     parser.add_argument('--num_samples', type=int, default=None,
                         help='Take a subset of the dataset to run and debug')
-    parser.add_argument('--batch_size', type=int, default=1,
+    parser.add_argument('--batch_size', type=int, default=8,
                         help='mini-batch size (default: 8), this is the total'
                             'batch size of all GPUs on the current node when using'
                             'Data Parallel or Distributed Data Parallel')
@@ -60,7 +60,7 @@ def parse_configs():
     ### build detector
     parser.add_argument('--num_classes', type=int, default=1,
                         help="number of classes expected in detector")
-    parser.add_argument('--num_queries', type=int, default=1,
+    parser.add_argument('--num_queries', type=int, default=20,
                         help="numebr of queries in the transformer")
     
     ####################################################################
@@ -81,6 +81,8 @@ def parse_configs():
     ####################################################################
     parser.add_argument('--num_frames', type=int, default=9, metavar='N',
                         help='number of frames into model')
+    parser.add_argument('--interval', type=int, default=1, metavar='N',
+                        help='number of intervals between frames')
     parser.add_argument('--start_epoch', type=int, default=1, metavar='N',
                         help='the starting epoch')
     parser.add_argument('--num_epochs', type=int, default=30, metavar='N',

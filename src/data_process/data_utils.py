@@ -159,40 +159,65 @@ def get_events_infor(game_list, configs, dataset_type):
 
 
 def get_all_detection_infor(game_list, configs, dataset_type):
-    num_frames_from_event = int((configs.num_frames - 1) / 2)
-    
+    num_frames_from_event = (configs.num_frames - 1) // 2
+    interval = configs.interval  # Get interval value from configs
+
     annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
     images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
     events_infor = []
     events_labels = []
+
+    def find_next_valid_frame(start_idx, game_name):
+        """Find the next available frame file from the given start index."""
+        while not os.path.exists(
+                os.path.join(images_dir, game_name, f'img_{start_idx:06d}.jpg')):
+            start_idx += 1  # Increment to the next frame index
+        return start_idx
+
     for game_name in game_list:
         ball_annos_path = os.path.join(annos_dir, game_name, 'ball_markup.json')
+
         # Load ball annotations
-        json_ball = open(ball_annos_path)
-        ball_annos = json.load(json_ball)
+        with open(ball_annos_path) as json_ball:
+            ball_annos = json.load(json_ball)
 
         for ball_frameidx, ball_location in ball_annos.items():
             ball_frameidx = int(ball_frameidx)
-            sub_ball_frame_indices = [idx for idx in range(ball_frameidx - num_frames_from_event,
-                                                                ball_frameidx + num_frames_from_event + 1)]
+
+            # Create frame indices with the correct interval
+            sub_ball_frame_indices = [
+                ball_frameidx + i * interval
+                for i in range(-num_frames_from_event, num_frames_from_event + 1)
+            ]
+
             img_path_list = []
-            for sub_smooth_idx in sub_ball_frame_indices:
-                img_path = os.path.join(images_dir, game_name, 'img_{:06d}.jpg'.format(sub_smooth_idx))
+            for idx in sub_ball_frame_indices:
+                # Find the next valid frame if the current one doesn't exist
+                valid_idx = find_next_valid_frame(idx, game_name)
+                img_path = os.path.join(images_dir, game_name, f'img_{valid_idx:06d}.jpg')
                 img_path_list.append(img_path)
 
-            # Get ball position for the last frame in the sequence
-            if '{}'.format(ball_frameidx) not in ball_annos.keys():
-                print(' no ball position for the frame idx {}'.format(ball_frameidx))
+            # Check if any valid frames were found
+            if not img_path_list:
+                print(f"No valid frames found for event at frame {ball_frameidx}.")
                 continue
-            ball_position_xy = ball_annos['{}'.format(ball_frameidx)]
+
+            # Check if the ball position exists for the target frame
+            if str(ball_frameidx) not in ball_annos:
+                print(f'No ball position for frame idx {ball_frameidx}.')
+                continue
+
+            # Get the ball position
+            ball_position_xy = ball_annos[str(ball_frameidx)]
             ball_position_xy = np.array([ball_position_xy['x'], ball_position_xy['y']], dtype=int)
-            # Ignore the event without ball information
+
+            # Ignore events with invalid ball positions
             if (ball_position_xy[0] < 0) or (ball_position_xy[1] < 0):
                 continue
 
             events_infor.append(img_path_list)
             events_labels.append(ball_position_xy)
-        
+
     return events_infor, events_labels
 
 

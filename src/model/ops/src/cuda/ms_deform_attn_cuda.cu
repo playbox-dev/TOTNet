@@ -48,7 +48,7 @@ at::Tensor ms_deform_attn_cuda_forward(
     const int num_point = sampling_loc.size(4);
 
     const int im2col_step_ = std::min(batch, im2col_step);
-
+    
     AT_ASSERTM(batch % im2col_step_ == 0, "batch(%d) must divide im2col_step(%d)", batch, im2col_step_);
     
     auto output = at::zeros({batch, num_query, num_heads, channels}, value.options());
