@@ -148,13 +148,6 @@ class DeformableBallDetection(nn.Module):
         hs, init_reference, inter_references = self.transformer(srcs, masks, poses, query_embeds) # shape for hs is [B, number of queries, hidden dimension]'
         # print(hs.shape, init_reference.shape, inter_references.shape) #shape is torch.Size([B, N, 512]) torch.Size([7, 1, 2]) torch.Size([7, 1, 2])
 
-        # For multiple frames outputs 
-        hs_reshaped = hs.view(B, N, self.num_queries, self.hidden_dim)
-        frame_weights = torch.softmax(self.frame_weights, dim=0)
-        weighted_outputs = hs_reshaped * frame_weights.view(1, -1, 1, 1)  # Apply weights
-        combined_embedding = weighted_outputs.sum(dim=1)  # Aggregate across frames: Shape [B, num_queries, hidden_dim]
-        hs = combined_embedding
-
         # Pass through the fully connected layers to produce logits for x and y coordinates
         x_coord_logits = self.fc_x(hs)  # [B, num_queries, w]
         y_coord_logits = self.fc_y(hs)  # [B, num_queries, h]
