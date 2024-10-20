@@ -17,7 +17,7 @@ def _get_clones(module, N):
 
 
 class DeformableBallDetection(nn.Module):
-    def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels, img_size):
+    def __init__(self, backbone, transformer, num_classes, num_queries, num_feature_levels, img_size, num_frames):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -41,7 +41,7 @@ class DeformableBallDetection(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
         # Learnable scalar weights for each frame in the sequence
-        self.frame_weights = nn.Parameter(torch.ones(8))  # Shape: [num_frames]
+        self.frame_weights = nn.Parameter(torch.ones(num_frames))  # Shape: [num_frames]
         
         # Feature extractor layers here...
         self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts x-coordinate
@@ -219,7 +219,7 @@ def build_detector(args):
 
     deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, num_classes=args.num_classes,
                                                               num_queries=args.num_queries, num_feature_levels=args.num_feature_levels,
-                                                              img_size=args.img_size).to(device)
+                                                              img_size=args.img_size, num_frames=args.num_frames).to(device)
     return deformable_ball_detection_model
 
 

@@ -14,9 +14,10 @@ from tqdm import tqdm
 
 sys.path.append('./')
 
-from data_process.dataloader import create_test_dataloader, create_normal_test_dataloader, create_masked_test_dataloader
+from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
-from model.deformable_detection_model import build_detector
+# from model.deformable_detection_model import build_detector
+from model.propose_model import build_detector
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse
 from utils.misc import AverageMeter
 from config.config import parse_configs
@@ -25,6 +26,10 @@ from config.config import parse_configs
 
 def main():
     configs = parse_configs()
+    if torch.cuda.is_available():
+        print(f"Number of GPUs: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            print(f"GPU {i}: {torch.cuda.get_device_name(i)}")
 
     if configs.gpu_idx is not None:
         warnings.warn('You have chosen a specific GPU. This will completely '
@@ -73,7 +78,9 @@ def main_worker(gpu_idx, configs):
         model = load_pretrained_model(model, configs.pretrained_path, gpu_idx)
     # Load dataset
     # test_loader = create_normal_test_dataloader(configs)
-    test_loader = create_masked_test_dataloader(configs)
+    train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
+    test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
+    # test(val_loader, model, configs)
     test(test_loader, model, configs)
 
 
@@ -90,7 +97,7 @@ def test(test_loader, model, configs):
     model.eval()
     with torch.no_grad():
         start_time = time.time()
-        for batch_idx, (batch_data, (masked_frameids, masked_frames, labels)) in enumerate(tqdm(test_loader)):
+        for batch_idx, (batch_data, (masked_frameids, labels)) in enumerate(tqdm(test_loader)):
 
             print(f'\n===================== batch_idx: {batch_idx} ================================')
 

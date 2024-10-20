@@ -7,29 +7,8 @@ sys.path.append('../')
 from model.backbone_positional_encoding import ChosenFeatureExtractor
 
 class MotionModel(nn.Module):
-    def __init__(self, num_output_channels, num_input_channels=3):
-        super(MotionModel, self).__init__()
-
-        # First set of convolutional layers for aggressive downsampling
-        self.conv = nn.Sequential(
-            nn.Conv2d(num_input_channels, 512, kernel_size=3, stride=2, padding=1),  # Downsample H, W by 2
-            nn.BatchNorm2d(512),
-            nn.ReLU(),
-            nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1),  # Further downsample H, W by 2
-            nn.BatchNorm2d(1024),
-            nn.ReLU(),
-            nn.Conv2d(1024, 2048, kernel_size=3, stride=2, padding=1),  # Downsample to H/8, W/8
-            nn.BatchNorm2d(2048),
-            nn.ReLU(),
-            nn.Conv2d(2048, num_output_channels, kernel_size=3, stride=2, padding=1),  # Further downsample
-            nn.BatchNorm2d(num_output_channels),
-            nn.ReLU()
-        )
-
-        # Final convolution to ensure the output is exactly (9, 15)
-        self.final_conv = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=3, stride=2, padding=1)
-    
-    
+    def __init__(self):
+        super(MotionModel, self).__init__()    
     
     def forward(self, x):
         """_summary_
@@ -45,9 +24,8 @@ class MotionModel(nn.Module):
         # Loop through consecutive frames and compute absolute difference
         for i in range(x.size(1) - 1):  # size(1) is N (number of frames)
             motion_difference = torch.abs(x[:, i] - x[:, i + 1])  # Compute frame difference
-            downsampled_motion = self.conv(motion_difference)
-            final_motion_features = self.final_conv(downsampled_motion)
-            motion_features.append(final_motion_features)
+    
+            motion_features.append(motion_difference)
         
         # Stack the motion features to create a tensor of shape [Bs, N-1, C, H, W]
         motion_features = torch.stack(motion_features, dim=1)
@@ -55,7 +33,7 @@ class MotionModel(nn.Module):
         return motion_features
 
 def build_motion_model(args):
-    motion_model = MotionModel(num_output_channels=args.backbone_out_channels)
+    motion_model = MotionModel()
     return motion_model
 
 # Sample Visualization Function (Optional)
@@ -113,4 +91,9 @@ if __name__ == '__main__':
     
     # Verify output shapes, the output shape is [B*P, 3, 2048, 34, 60] where B*P is batch and pair numbers, 3 means frame1, frame2 and motion feature
     print(f"Features stacked_features Shape: {motion_features.shape}")  # Expected: [B*P, 3, 2048, 34, 60]
-
+    torch.set_printoptions(threshold=torch.inf)
+    with open('motion_features.txt', 'w') as f:
+        for i, batch in enumerate(motion_features):
+            for j, frame in enumerate(batch):
+                f.write(f"Motion feature batch {i}, frame {j}:\n")
+                f.write(f"{frame}\n")

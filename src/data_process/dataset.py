@@ -206,7 +206,7 @@ class Occlusion_Dataset(Dataset):
         
         image_list_np = np.array(image_list)
         masked_frame = np.array(converted_imgs[masked_frameid])
-        return image_list_np, (masked_frameid, masked_frame, np.array(ball_xy.astype(int)))
+        return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)))
 
 
 if __name__ == '__main__':

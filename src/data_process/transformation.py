@@ -3,6 +3,7 @@ import random
 import cv2
 import numpy as np
 import torchvision.transforms.functional as F
+import torch
 
 
 class Compose(object):
@@ -178,34 +179,42 @@ class Random_VFlip(object):
         return transformed_imgs, ball_position_xy
 
 
+
 class Random_Ball_Mask:
-    def __init__(self, mask_size=(20, 20), p=0.5):
+    def __init__(self, mask_size=(20, 20), p=0.5, mask_type='mean'):
         """
         Args:
             mask_size (tuple): Height and width of the mask area (blackout area).
             p (float): Probability of applying the mask.
+            mask_type (str): Type of mask ('zero', 'noise', 'mean').
         """
         self.mask_size = mask_size
         self.p = p
+        self.mask_type = mask_type
 
     def __call__(self, imgs, ball_position_xy):
         """
         Args:
-            imgs (tensor): Tensor of shape [N, C, H, W], where N is the number of frames.
+            imgs : List of numpy arrays where the length represents num frames
             ball_position_xy (tuple): (x, y) ball position for the labeled frame.
 
         Returns:
             masked_imgs: Tensor with the ball area masked in some frames.
         """
-        H, W, C = imgs[0].shape  # Get height and width from a single image
+        H, W, C = imgs[0].shape  # Get the shape from the input tensor
         mask_h, mask_w = self.mask_size
+        movement_range = H//10
 
         # Iterate over all frames and apply masking with some probability
         for i, img in enumerate(imgs):
             if random.random() < self.p:
-                # Slightly jitter the ball position to simulate slight movement
-                jitter_x = random.randint(-2, 2)
-                jitter_y = random.randint(-2, 2)
+                if i == len(imgs)//2:
+                    jitter_x=0
+                    jitter_y=0
+                else:
+                    # Slightly jitter the ball position to simulate slight movement
+                    jitter_x = random.randint(-movement_range, movement_range)
+                    jitter_y = random.randint(-movement_range, movement_range)
                 x = int(ball_position_xy[0] + jitter_x)
                 y = int(ball_position_xy[1] + jitter_y)
 
@@ -213,7 +222,17 @@ class Random_Ball_Mask:
                 top = max(0, min(H - mask_h, y - mask_h // 2))
                 left = max(0, min(W - mask_w, x - mask_w // 2))
 
-                # Apply the mask (set pixel values to 0)
-                img[top:top + mask_h, left:left + mask_w, :] = 0
+                # Apply the chosen mask type
+                if self.mask_type == 'zero':
+                    img[top:top + mask_h, left:left + mask_w, :] = 0
+
+                elif self.mask_type == 'noise':
+                    noise = np.random.randn(mask_h, mask_w, C) * 255  # Generate noise in the same shape
+                    img[top:top + mask_h, left:left + mask_w, :] = noise.clip(0, 255)  # Apply noise
+
+                elif self.mask_type == 'mean':
+                    # Calculate the mean value along the spatial dimensions
+                    mean_value = img[top:top + mask_h, left:left + mask_w, :].mean(axis=(0, 1))
+                    img[top:top + mask_h, left:left + mask_w, :] = mean_value  # Apply mean
 
         return imgs, ball_position_xy

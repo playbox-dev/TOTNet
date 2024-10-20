@@ -18,7 +18,7 @@ def _get_clones(module, N):
 
 
 class DeformableBallDetection(nn.Module):
-    def __init__(self, backbone, transformer, motion_model, num_classes, num_queries, num_feature_levels, img_size):
+    def __init__(self, backbone, transformer, motion_model, num_queries, num_feature_levels, img_size, num_frames):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
@@ -37,11 +37,12 @@ class DeformableBallDetection(nn.Module):
         self.hidden_dim = transformer.d_model
         self.motion_model = motion_model
 
-        self.class_embed = nn.Linear(self.hidden_dim, num_classes)
-        self.bbox_embed = MLP(self.hidden_dim, self.hidden_dim, 4, 3)
         self.coordinates_embed = nn.Linear(self.hidden_dim, 2)
         self.num_feature_levels = num_feature_levels
         self.sigmoid = nn.Sigmoid()
+
+        # Learnable scalar weights for each frame in the sequence
+        self.frame_weights = nn.Parameter(torch.ones(num_frames))  # Shape: [num_frames]
         
         # Feature extractor layers here...
         self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts x-coordinate
@@ -77,21 +78,6 @@ class DeformableBallDetection(nn.Module):
         for proj in self.input_proj:
             nn.init.xavier_uniform_(proj[0].weight, gain=1)
             nn.init.constant_(proj[0].bias, 0)
-
-        # init constant bbox embedding layer
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(num_classes) * bias_value
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
-
-        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = transformer.decoder.num_layers
-
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-        self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-        self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-        self.transformer.decoder.bbox_embed = None
 
     def combine_motion_featuremaps(self, motion_features, feature_maps):
         """
@@ -136,13 +122,14 @@ class DeformableBallDetection(nn.Module):
         # reshape to [B*N-1, C, H, W] then add extra dimension for the multiple feature level
         # motion_features = motion_features.view(B*(N-1), motion_features.size(2), motion_features.size(3), motion_features.size(4)).unsqueeze(dim=0)
         # get feature map from backbone
-        samples = samples.view(B*N, C, H, W) # [B*N, C, H, W]
-        features = self.backbone(samples) # Expect it to output feature map which will be in shape [Number of feature level, B*N, C, H, W]
+        # samples = samples.view(B*N, C, H, W) # [B*N, C, H, W]
+        combined_samples = self.combine_motion_featuremaps(motion_features, samples).view(B*N, C, H, W)
+        features_combined = self.backbone(combined_samples) # Expect it to output feature map which will be in shape [Number of feature level, B*N, C, H, W]
         # combine both motion and feature maps for better prediction'
-        features_reshaped = features.squeeze(0).view(B,N,features.size(2),features.size(3),features.size(4))
-        # print(f"motion features in shape {motion_features.shape}, feature maps in shape {features.shape}")
-        features_combined = self.combine_motion_featuremaps(motion_features, features_reshaped)
-        features_combined = features_combined.view(B*N, features_reshaped.size(2),features_reshaped.size(3),features_reshaped.size(4)).unsqueeze(0)
+        # features_reshaped = features.squeeze(0).view(B,N,features.size(2),features.size(3),features.size(4))
+        # # print(f"motion features in shape {motion_features.shape}, feature maps in shape {features.shape}")
+        # features_combined = self.combine_motion_featuremaps(motion_features, features_reshaped)
+        # features_combined = features_combined.view(B*N, features_reshaped.size(2),features_reshaped.size(3),features_reshaped.size(4)).unsqueeze(0)
         srcs = []
         masks = []
         poses = []
@@ -161,7 +148,12 @@ class DeformableBallDetection(nn.Module):
         hs, init_reference, inter_references = self.transformer(srcs, masks, poses, query_embeds) # shape for hs is [B, number of queries, hidden dimension]'
         # print(hs.shape, init_reference.shape, inter_references.shape) #shape is torch.Size([B, N, 512]) torch.Size([7, 1, 2]) torch.Size([7, 1, 2])
 
-        # hs_mean_frames = hs_reshaped.mean(dim=1)  # Shape [B, num_queries, hidden_dim]
+        # For multiple frames outputs 
+        hs_reshaped = hs.view(B, N, self.num_queries, self.hidden_dim)
+        frame_weights = torch.softmax(self.frame_weights, dim=0)
+        weighted_outputs = hs_reshaped * frame_weights.view(1, -1, 1, 1)  # Apply weights
+        combined_embedding = weighted_outputs.sum(dim=1)  # Aggregate across frames: Shape [B, num_queries, hidden_dim]
+        hs = combined_embedding
 
         # Pass through the fully connected layers to produce logits for x and y coordinates
         x_coord_logits = self.fc_x(hs)  # [B, num_queries, w]
@@ -214,10 +206,10 @@ def build_detector(args):
     transformer = build_transformer(args)
     motion_model = build_motion_model(args)
 
-    deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, motion_model=motion_model,
-                                                                num_classes=args.num_classes, num_queries=args.num_queries, 
+    deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, 
+                                                                motion_model=motion_model, num_queries=args.num_queries, 
                                                                 num_feature_levels=args.num_feature_levels,
-                                                                img_size=args.img_size).to(device)
+                                                                img_size=args.img_size, num_frames=args.num_frames).to(device)
     return deformable_ball_detection_model
 
 

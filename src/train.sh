@@ -1,21 +1,21 @@
 #!/bin/bash
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:2
-#SBATCH --job-name=Aug_mask
+#SBATCH --job-name=Aug_occl
 
 # single node multiple gpu
 python main.py     \
     --num_epochs 30   \
-    --saved_fn 'mutli_frames_masked_train_270_480_proposed'   \
+    --saved_fn 'occluded_mutliframes_train_270_480_motion_2'   \
     --backbone_choice 'single' \
     --num_feature_levels 1  \
-    --interval 10   \
-    --num_frames 9  \
+    --interval 5   \
+    --num_frames 5  \
     --lr 1e-4 \
     --img_size 270 480 \
     --num_queries 50    \
-    --batch_size 16 \
-    --transfromer_dmodel 512    \
+    --batch_size 32 \
+    --transfromer_dmodel 256    \
     --print_freq 50 \
     --dist_url 'tcp://127.0.0.1:29500' \
     --dist_backend 'nccl' \
@@ -23,7 +23,8 @@ python main.py     \
     --world_size 1 \
     --rank 0 \
     --distributed \
-    --no-val    \
+    --no-test    \
+    # --num_samples 1000  \
 
 # single node single gpu, train data total length
 # python main.py     \

@@ -45,41 +45,45 @@ class ConvLSTM_Model(nn.Module):
 
 
 
-class Temporal_Model(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size=512, num_layers=6, bidirectional=True, teacher_forcing_ratio=0):
-        super(Temporal_Model, self).__init__()
-        self.hidden_size = hidden_size
+class TemporalSelfAttention(nn.Module):
+    def __init__(self, d_model, num_heads, num_layers):
+        """
+        Args:
+            d_model (int): Dimension of the model (C).
+            num_heads (int): Number of attention heads.
+            num_layers (int): Number of temporal self-attention layers.
+        """
+        super(TemporalSelfAttention, self).__init__()
         self.num_layers = num_layers
 
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, bidirectional=bidirectional, batch_first=True)
-        self.teacher_forcing_ratio = teacher_forcing_ratio
-        if bidirectional:
-            self.fc = nn.Linear(hidden_size*2, output_size)
-        else:
-            self.fc = nn.Linear(hidden_size, output_size)
+        # Create a list of multi-head attention layers and normalization layers
+        self.attention_layers = nn.ModuleList([
+            nn.MultiheadAttention(d_model, num_heads, batch_first=True) 
+            for _ in range(num_layers)
+        ])
+        self.norm_layers = nn.ModuleList([
+            nn.LayerNorm(d_model) for _ in range(num_layers)
+        ])
 
-    
-    def forward(self, x):
-        """_summary_
-
-        Args:
-            x (tensor): shape [B, N, H*W, C]
-
-        Returns:
-            tensor_: embeddings of an embedding represents
+    def forward(self, memory):
         """
-        B, N, HW, C = x.shape
-        reshaped_x = x.view(B, N, HW*C)
-    
-        h0 = torch.zeros(self.num_layers * 2, B, self.hidden_size).to(x.device)  # 2 for bidirectional LSTM
-        c0 = torch.zeros(self.num_layers * 2, B, self.hidden_size).to(x.device)  # 2 for bidirectional LSTM
-        out, (h0, c0) = self.lstm(reshaped_x, (h0, c0))  # Pass reshaped input
-        out = out[:, -1, :]  # Shape: [batch_size, hidden_size * 2]
-        out = out.view(B, N, HW, C)
-        out = self.fc(out)  # Optional fully connected layer after RNN
+        Args:
+            memory: [B, N, H*W, C] – Feature maps for all frames.
+        Returns:
+            temporal_output: [B, N, H*W, C] – Temporal-attended feature maps.
+        """
+        B, N, HW, C = memory.shape
+        memory = memory.view(B, N, -1)  # Flatten spatial dimensions (N, HW*C)
 
-        
-        return out
+        # Apply multiple layers of temporal self-attention
+        for i in range(self.num_layers):
+            attn_output, _ = self.attention_layers[i](memory, memory, memory)  # [B, N, HW*C]
+            memory = self.norm_layers[i](attn_output + memory)  # Residual connection
+
+        temporal_output = memory.view(B, N, HW, C)  # Reshape back to original shape
+        return temporal_output
+    
+    
 
 def create_temporal_model(args):
     temporal_model = ConvLSTM_Model(args.transfromer_dmodel, hidden_channels=[512, 512, 512], output_channels=args.transfromer_dmodel, num_layers=3)

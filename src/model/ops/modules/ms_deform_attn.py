@@ -48,7 +48,7 @@ class DeformAttn(nn.Module):
             warnings.warn("You'd better set d_model in MSDeformAttn to make the dimension of each attention head a power of 2 "
                           "which is more efficient in our CUDA implementation.")
 
-        self.im2col_step = 72
+        self.im2col_step = 80
 
         self.d_model = d_model
         self.n_levels = n_levels

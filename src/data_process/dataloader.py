@@ -219,7 +219,7 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
 
     train_transform = Compose([
         Resize(new_size=configs.img_size, p=1.0),
-        Random_Ball_Mask(mask_size=(20,20), p=1),
+        Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
     ], p=1.)
 
     # Load train and validation data information
@@ -249,6 +249,7 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
     if not configs.no_val:
         val_transform = Compose([
             Resize(new_size=configs.img_size, p=1.0),
+            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
         ], p=1.)
         val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
                                      num_samples=configs.num_samples)
@@ -269,17 +270,24 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
 
     return train_dataloader, val_dataloader, train_sampler
 
-def create_occlusion_test_dataloader(configs):
+def create_occlusion_test_dataloader(configs, subset_size=None):
     """Create dataloader for testing phase"""
 
     test_transform = Compose([
             Resize(new_size=configs.img_size, p=1.0),
+            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
         ], p=1.)
     dataset_type = 'test'
     test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
     test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
     test_sampler = None
+
+    # If subset_size is provided, create a subset for training
+    if subset_size is not None:
+        test_indices = torch.randperm(len(test_dataset))[:subset_size].tolist()
+        test_dataset = Subset(test_dataset, test_indices)
+
     if configs.distributed:
         test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
     test_dataloader = DataLoader(test_dataset, batch_size=configs.batch_size, shuffle=False,
@@ -330,6 +338,7 @@ if __name__ == '__main__':
     configs.batch_size = 1
     configs.img_size = (1080, 1920)
     configs.interval = 10
+    configs.num_frames = 5
 
 
     # Create Masked dataloaders 
@@ -340,11 +349,11 @@ if __name__ == '__main__':
     print(f"len test_loader {len(test_dataloader)}")
 
 
-    batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader))
+    batch_data, (masked_frameids, labels) = next(iter(train_dataloader))
 
     # Check the shapes
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
-    print(f'Batch labels shape: {labels.shape}, batch masked frames shape {masked_frames.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
+    print(f'Batch labels shape: {labels.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
     print(masked_frameids, labels)
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]
@@ -364,7 +373,7 @@ if __name__ == '__main__':
     # Loop over each sample in the batch
     for batch_index in range(batch_data.shape[0]):
         sample_data = batch_data[batch_index]  # Shape: [N, C, H, W]
-        masked_image = masked_frames[batch_index]  # Shape: [C, H, W]
+        masked_image = sample_data[configs.num_frames//2]  # Shape: [C, H, W]
         ball_xy = labels[batch_index].cpu().numpy()  # Ball coordinates for this sample
 
         # Collect all frames (original and masked) for visualization

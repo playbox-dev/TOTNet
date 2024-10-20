@@ -13,21 +13,21 @@ from utils.misc import inverse_sigmoid
 
 class Transformer(nn.Module):
     def __init__(self, channels=2048, d_model=512, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, 
-                 dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4, num_frames=8, batch_size=8):
+                 dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4, num_frames=9, batch_size=8):
         super(Transformer, self).__init__()
 
         self.d_model = d_model
         self.nhead = nhead
         self.num_frames = num_frames
-        self.batch_size = torch.tensor(batch_size//2, dtype=torch.int32)
         self.embedder_layer = nn.Linear(channels, d_model)
+        self.batch_size = batch_size
         encoder_layer = EncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
         self.encoder = Encoder(encoder_layer, num_encoder_layers)
 
         # temporal model
-        self.temporal_model = ConvLSTM_Model(input_channels=512, hidden_channels=[512, 512, 512], output_channels=512, num_layers=3)
+        # self.temporal_model = ConvLSTM_Model(input_channels=self.d_model, hidden_channels=[self.d_model, self.d_model, self.d_model], output_channels=self.d_model, num_layers=3)
 
         decoder_layer = DecoderLayer(d_model=d_model, d_ffn=dim_feedforward, 
                                      dropout=dropout, activation=activation, n_levels=num_feature_levels, n_heads=nhead, n_points=enc_n_points)
@@ -99,24 +99,25 @@ class Transformer(nn.Module):
         mask_flatten = None 
         # memory shape [B*N, H*W, d_model]
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
-
         bs, _, c = memory.shape
         # print(f"memory shape is {memory.shape}")
         B, N = self.batch_size, self.num_frames
-        memory = memory.view(B, N, h, w, c)
-        
-        temporal_spatial_output = self.temporal_model(memory) # shape [B*N, H*W, C]
-        
+
+        # memory = memory.view(B, N, h, w, c)
+        # temporal_spatial_output = self.temporal_model(memory) # shape [B, H*W, C]
+
 
         query_embed, tgt = torch.split(query_embed, c, dim=1)
-        query_embed = query_embed.unsqueeze(0).expand(B, -1, -1)
-        tgt = tgt.unsqueeze(0).expand(B, -1, -1)
+        query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
+        tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
         reference_points = self.reference_points(query_embed).sigmoid()
+
         init_reference_out = reference_points
-        valid_ratios = valid_ratios[B, ...]
+        # valid_ratios= valid_ratios[:B]  # Extract valid ratios for the batch
+
         # print(f"""temporal_spatial_output shape is {temporal_spatial_output.shape}, tgt shape {tgt.shape}, 
             #   reference_points shape {reference_points.shape}, query_embed shape {query_embed.shape}, valid_rations {valid_ratios.shape}""")
-        hs, inter_references = self.decoder(tgt, reference_points, temporal_spatial_output,
+        hs, inter_references = self.decoder(tgt, reference_points, memory,
                                             spatial_shapes, level_start_index, valid_ratios, query_embed, mask_flatten)
         
         inter_references_out = inter_references
@@ -346,8 +347,12 @@ def get_valid_ratio(mask):
 
 
 def build_transformer(args):
+    if args.distributed:
+        batch_size = torch.tensor(args.batch_size // torch.cuda.device_count(), dtype=torch.int32)
+    else:
+        batch_size = torch.tensor(args.batch_size, dtype=torch.int32)
     transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, 
-                              num_feature_levels=args.num_feature_levels, num_frames=args.num_frames-1, batch_size=args.batch_size).to(args.device)
+                              num_feature_levels=args.num_feature_levels, num_frames=args.num_frames, batch_size=batch_size).to(args.device)
     return transformer
 
 

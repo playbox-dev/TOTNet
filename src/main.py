@@ -18,7 +18,7 @@ from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float
 from utils.misc import AverageMeter, ProgressMeter, print_gpu_memory_usage
-from data_process.dataloader import create_masked_train_val_dataloader, create_masked_test_dataloader, create_occlusion_train_val_dataloader, create_occlusion_test_dataloader
+from data_process.dataloader import  create_occlusion_train_val_dataloader, create_occlusion_test_dataloader
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -111,8 +111,12 @@ def main_worker(gpu_idx, configs):
     if logger is not None:
         logger.info(">>> Loading dataset & getting dataloader...")
     # Create dataloader, option with normal data
-    train_loader, val_loader, train_sampler = create_masked_train_val_dataloader(configs)
-    test_loader = create_masked_test_dataloader(configs)
+    train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
+    test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
+
+    if logger is not None:
+        batch_data, (masked_frameids, labels) = next(iter(train_loader))
+        logger.info(f"Batch data shape: {batch_data.shape}")
 
     # Print the number of samples for this GPU/worker
     if configs.distributed:
@@ -159,6 +163,7 @@ def main_worker(gpu_idx, configs):
             saved_state = get_saved_state(model, optimizer, lr_scheduler, epoch, configs, best_val_loss,
                                           earlystop_count)
             save_checkpoint(configs.checkpoints_dir, configs.saved_fn, saved_state, is_best, epoch)
+            logger.info(f"new checkpoint has been saved")
         # Check early stop training
         if configs.earlystop_patience is not None:
             earlystop_count = 0 if is_best else (earlystop_count + 1)
@@ -201,7 +206,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
     model.train()
     start_time = time.time()
     
-    for batch_idx, (batch_data, (masked_frameids, _, labels)) in enumerate(tqdm(train_loader)):
+    for batch_idx, (batch_data, (masked_frameids, labels)) in enumerate(tqdm(train_loader)):
 
         data_time.update(time.time() - start_time)
 
@@ -250,7 +255,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
     model.eval()
     with torch.no_grad():
         start_time = time.time()
-        for batch_idx, (batch_data, (masked_frameids, masked_frames, labels)) in enumerate(tqdm(val_loader)):
+        for batch_idx, (batch_data, (masked_frameids, labels)) in enumerate(tqdm(val_loader)):
             data_time.update(time.time() - start_time)
             batch_size = batch_data.size(0)
 

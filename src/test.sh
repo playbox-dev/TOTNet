@@ -5,11 +5,13 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'mutli_frames_masked_train_270_480_single' \
+  --saved_fn 'occluded_mutliframes_train_270_480_motion_2' \
   --gpu_idx 0   \
   --num_queries 50    \
-  --batch_size 32   \
+  --batch_size 16   \
+  --transfromer_dmodel 256    \
   --img_size 270 480    \
-  --num_frames 9  \
-  --pretrained_path ../checkpoints/mutli_frames_masked_train_270_480_single/mutli_frames_masked_train_270_480_single_best.pth \
+  --num_frames 5  \
+  --interval 5   \
+  --pretrained_path ../checkpoints/occluded_mutliframes_train_270_480_motion_2/occluded_mutliframes_train_270_480_motion_2_best.pth \
 

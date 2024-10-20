@@ -100,8 +100,6 @@ class Transformer(nn.Module):
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
 
         bs, _, c = memory.shape
-        print(memory.shape)
-        exit()
         query_embed, tgt = torch.split(query_embed, c, dim=1)
         query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
         tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
