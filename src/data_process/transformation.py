@@ -45,12 +45,21 @@ class Denormalize():
 
 
 class Resize(object):
-    def __init__(self, new_size, p=0.5, interpolation=cv2.INTER_LINEAR):
+    def __init__(self, new_size, p=0.5, interpolation=cv2.INTER_LANCZOS4):
         self.new_size = new_size  # new_size should be (width, height)
         self.p = p
         self.interpolation = interpolation
 
     def __call__(self, imgs, ball_position_xy):
+        """_summary_
+
+        Args:
+            imgs (numpy): list of images
+            ball_position_xy (numpy): ball position of intended frame 
+
+        Returns:
+            _type_: _description_
+        """
         # If random value is greater than p, return original imgs and ball position
         if random.random() > self.p:
             return imgs, ball_position_xy
@@ -68,13 +77,14 @@ class Resize(object):
             transformed_imgs.append(transformed_img)
 
         # Adjust ball position
-        w_ratio = new_w / original_w  # New width divided by original width
-        h_ratio = new_h / original_h  # New height divided by original height
+        w_ratio = original_w / new_w  # New width divided by original width
+        h_ratio = original_h / new_h # New height divided by original height
 
-        # Scale ball position to match the resized image
-        ball_position_xy = np.array([ball_position_xy[0] * w_ratio, ball_position_xy[1] * h_ratio])
-
-        return transformed_imgs, ball_position_xy
+        transformed_ball_pos = np.array([ball_position_xy[0] / w_ratio, ball_position_xy[1] / h_ratio])
+        # Round the coordinates to the nearest integer
+        # transformed_ball_pos = np.round(transformed_ball_pos).astype(int)
+        
+        return transformed_imgs, transformed_ball_pos
 
 
 class Random_Crop(object):
@@ -85,6 +95,7 @@ class Random_Crop(object):
 
     def __call__(self, imgs, ball_position_xy):
         transformed_imgs = imgs.copy()
+        transformed_ball_pos = ball_position_xy.copy()
         # imgs are before resizing
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
@@ -101,17 +112,16 @@ class Random_Crop(object):
             h_ratio = h / new_h
             # crop a sequence of images
             transformed_imgs = []
-            for img in imgs:
+            for i, img in enumerate(imgs):
                 img_cropped = img[min_y:max_y, min_x:max_x, :]
                 # Resize the image to the original dimensions
                 img_resized = cv2.resize(img_cropped, (w, h), interpolation=self.interpolation)
                 transformed_imgs.append(img_resized)
-           
-            # Adjust ball position
-            ball_position_xy = np.array([(ball_position_xy[0] - min_x) * w_ratio,
-                                         (ball_position_xy[1] - min_y) * h_ratio])
+                if i == len(imgs):
+                    transformed_ball_pos = np.array([(ball_position_xy[0] - min_x) * w_ratio,
+                                            (ball_position_xy[1] - min_y) * h_ratio])
 
-        return transformed_imgs, ball_position_xy
+        return transformed_imgs, transformed_ball_pos
 
 
 class Random_Rotate(object):
@@ -196,27 +206,25 @@ class Random_Ball_Mask:
         """
         Args:
             imgs : List of numpy arrays where the length represents num frames
-            ball_position_xy (tuple): (x, y) ball position for the labeled frame.
+            ball_position_xy (numpy): (x, y) ball position for the labeled frame.
 
         Returns:
             masked_imgs: Tensor with the ball area masked in some frames.
         """
         H, W, C = imgs[0].shape  # Get the shape from the input tensor
-        mask_h, mask_w = self.mask_size
-        movement_range = H//10
-
+        movement_range = self.mask_size[0]//2
+        mask_h = random.randint(self.mask_size[0] - movement_range, self.mask_size[0] + movement_range)
+        mask_w = random.randint(self.mask_size[1] - movement_range, self.mask_size[1] + movement_range)
+        x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
         # Iterate over all frames and apply masking with some probability
-        for i, img in enumerate(imgs):
+        for i, (img) in enumerate(imgs):
             if random.random() < self.p:
-                if i == len(imgs)//2:
-                    jitter_x=0
-                    jitter_y=0
+                if i == len(imgs)-1:
+                    x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
                 else:
-                    # Slightly jitter the ball position to simulate slight movement
-                    jitter_x = random.randint(-movement_range, movement_range)
-                    jitter_y = random.randint(-movement_range, movement_range)
-                x = int(ball_position_xy[0] + jitter_x)
-                y = int(ball_position_xy[1] + jitter_y)
+                    # Apply mask at a random position in non-labeled frames
+                    x = random.randint(0, W - mask_w)
+                    y = random.randint(0, H - mask_h)
 
                 # Ensure the mask is within the image boundaries
                 top = max(0, min(H - mask_h, y - mask_h // 2))
@@ -233,6 +241,89 @@ class Random_Ball_Mask:
                 elif self.mask_type == 'mean':
                     # Calculate the mean value along the spatial dimensions
                     mean_value = img[top:top + mask_h, left:left + mask_w, :].mean(axis=(0, 1))
-                    img[top:top + mask_h, left:left + mask_w, :] = mean_value  # Apply mean
+                    noise = np.random.randn(mask_h, mask_w, C) * 10  # Small noise
+                    img[top:top + mask_h, left:left + mask_w, :] = (mean_value + noise).clip(0, 255)  # Apply mean
 
         return imgs, ball_position_xy
+
+
+
+class RandomColorJitter(object):
+    def __init__(self, brightness=0.2, contrast=0.2, saturation=0.1, hue=0.1, p=0.5):
+        """
+        Initializes the RandomColorJitter augmentation.
+
+        Args:
+            brightness (float): Brightness adjustment factor (default 0.2).
+            contrast (float): Contrast adjustment factor (default 0.2).
+            saturation (float): Saturation adjustment factor (default 0.1).
+            hue (float): Hue shift factor (default 0.1).
+            p (float): Probability of applying the jitter (default 0.5).
+        """
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+        self.hue = hue
+        self.p = p
+
+    def __call__(self, imgs, ball_position_xy):
+        """
+        Applies random color jitter to a sequence of images.
+
+        Args:
+            imgs (list of np.ndarray): List of images to augment.
+
+        Returns:
+            list of np.ndarray: Augmented images.
+        """
+        transformed_imgs = imgs.copy()
+
+        # Apply jitter with probability p
+        if random.random() <= self.p:
+            transformed_imgs = []
+            for img in imgs:
+                jittered_img = self.apply_jitter(img)
+                transformed_imgs.append(jittered_img)
+
+        return transformed_imgs, ball_position_xy
+
+    def apply_jitter(self, img):
+        """
+        Applies brightness, contrast, saturation, and hue jitter to a single image.
+
+        Args:
+            img (np.ndarray): Input image (H, W, C) in range [0, 255].
+
+        Returns:
+            np.ndarray: Jittered image.
+        """
+        # Convert to float32 and normalize to [0, 1]
+        img = img.astype(np.float32) / 255.0
+
+        # Apply brightness jitter
+        brightness_factor = 1.0 + np.random.uniform(-self.brightness, self.brightness)
+        img = np.clip(img * brightness_factor, 0, 1)
+
+        # Apply contrast jitter
+        contrast_factor = 1.0 + np.random.uniform(-self.contrast, self.contrast)
+        mean = np.mean(img, axis=(0, 1), keepdims=True)
+        img = np.clip((img - mean) * contrast_factor + mean, 0, 1)
+
+        # Convert to HSV to apply saturation and hue jitter
+        hsv_img = cv2.cvtColor((img * 255).astype(np.uint8), cv2.COLOR_RGB2HSV)
+
+        # Apply saturation jitter
+        saturation_factor = 1.0 + np.random.uniform(-self.saturation, self.saturation)
+        hsv_img[..., 1] = np.clip(hsv_img[..., 1] * saturation_factor, 0, 255)
+
+        # Apply hue jitter
+        hue_shift = np.random.uniform(-self.hue * 180, self.hue * 180)
+        hsv_img[..., 0] = (hsv_img[..., 0] + hue_shift) % 180
+
+        # Convert back to RGB
+        jittered_img = cv2.cvtColor(hsv_img, cv2.COLOR_HSV2RGB).astype(np.float32) / 255.0
+
+        # Convert back to uint8 and scale to [0, 255]
+        jittered_img = np.clip(jittered_img * 255, 0, 255).astype(np.uint8)
+
+        return jittered_img

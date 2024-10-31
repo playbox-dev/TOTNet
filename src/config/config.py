@@ -15,11 +15,9 @@ def parse_configs():
                         help='the ROOT working directory')
     parser.add_argument('--saved_fn', type=str, default='logs', metavar='FN',
                         help='The name using for saving logs, models,...')
-    parser.add_argument('--smooth-labelling', action='store_true',
-                    help='If true, smoothly make the labels of event spotting')
-    parser.add_argument('--no-val', action='store_true',
+    parser.add_argument('--no_val', action='store_true',
                     help='If true, use all data for training, no validation set')
-    parser.add_argument('--no-test', action='store_true',
+    parser.add_argument('--no_test', action='store_true',
                         help='If true, dont evaluate the model on the test set')
     parser.add_argument('--val-size', type=float, default=0.2,
                     help='The size of validation set')
@@ -105,6 +103,8 @@ def parse_configs():
                         help='step_size of the learning rate when using steplr scheduler')
     parser.add_argument('--lr_patience', type=int, default=3, metavar='N',
                         help='patience of the learning rate when using ReduceoPlateau scheduler')
+    parser.add_argument('--occluded_prob', type=float, default=0.5, metavar='N',
+                        help='occluded probability of ball')
     parser.add_argument(
         '--img_size', 
         type=int, 
@@ -147,6 +147,7 @@ def parse_configs():
     configs.pin_memory = True
 
     configs.org_size = (1080, 1920)
+    configs.fps = 25
 
     configs.results_dir = os.path.join(configs.working_dir, 'results')
     configs.logs_dir = os.path.join(configs.working_dir, 'logs', configs.saved_fn)

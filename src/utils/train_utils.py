@@ -77,7 +77,6 @@ def reduce_tensor(tensor, world_size):
     rt /= world_size
     return rt
 
-
 def to_python_float(t):
     if hasattr(t, 'item'):
         return t.item()

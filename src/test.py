@@ -16,8 +16,8 @@ sys.path.append('./')
 
 from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
-# from model.deformable_detection_model import build_detector
-from model.propose_model import build_detector
+from model.deformable_detection_model import build_detector
+# from model.propose_model import build_detector
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse
 from utils.misc import AverageMeter
 from config.config import parse_configs
@@ -80,6 +80,7 @@ def main_worker(gpu_idx, configs):
     # test_loader = create_normal_test_dataloader(configs)
     train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
     test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
+
     # test(val_loader, model, configs)
     test(test_loader, model, configs)
 
@@ -109,10 +110,10 @@ def test(test_loader, model, configs):
             labels = labels.float()
             # compute output
 
-            output_coords_logits = model(batch_data.float())
-
-            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_coords_logits, labels, img_height=configs.img_size[0], img_width=configs.img_size[1])
-            pred_x_logits, pred_y_logits = output_coords_logits
+            output_coords = model(batch_data.float()) # output in shape ([B, N, W],[B, N, H]) if output heatmap
+        
+            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_coords, labels)
+            pred_x_logits, pred_y_logits = output_coords
 
             for sample_idx in range(batch_size):
                 pred_x_logit = pred_x_logits[sample_idx]  # Shape: [W]
@@ -142,7 +143,7 @@ def test(test_loader, model, configs):
             rmse_overall.update(rmse)
 
     print(
-        'rmse_global: {:.1f}, real_rmse {:.1f}'.format(rmse_overall.avg, real_rmse.avg))
+        'rmse_global: {:.2f}, real_rmse {:.2f}'.format(rmse_overall.avg, real_rmse.avg))
     print('Done testing')
 
 

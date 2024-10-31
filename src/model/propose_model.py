@@ -107,6 +107,27 @@ class DeformableBallDetection(nn.Module):
                                             + motion_features[:, i])
 
         return combined_feature_maps
+    
+    def heatmap_to_coord(self, heatmaps_x, heatmaps_y):
+        """
+        Convert heatmap to (x, y) coordinates based on the maximum value.
+        Args:
+            heatmapx (tensor): [B, N, W] heatmap tensor
+            heatmapy (tensor): [B, N, H] heatmap tensor
+        Returns:
+            coordinates (tensor): [B, 2] tensor of (x, y) coordinates
+        """
+        B, N, W = heatmaps_x.shape
+        _, _, H = heatmaps_y.shape
+
+        # Get the index of the maximum value along the width (x-axis) and height (y-axis)
+        max_x = torch.argmax(heatmaps_x, dim=-1)  # Shape: [B, N]
+        max_y = torch.argmax(heatmaps_y, dim=-1)  # Shape: [B, N]
+
+        # Stack the (x, y) coordinates along the last dimension
+        coordinates = torch.stack((max_x, max_y), dim=-1)  # Shape: [B, N, 2]
+
+        return coordinates
 
 
     def forward(self, samples):
@@ -146,13 +167,13 @@ class DeformableBallDetection(nn.Module):
         # shape (1, [8, 512, 9, 15]), (1, [8, 9, 15]), (1, [8, 512, 9, 15]), ([1, 1024])
         # print(srcs[0].shape, masks[0].shape, poses[0].shape, query_embeds.shape)
         hs, init_reference, inter_references = self.transformer(srcs, masks, poses, query_embeds) # shape for hs is [B, number of queries, hidden dimension]'
-        # print(hs.shape, init_reference.shape, inter_references.shape) #shape is torch.Size([B, N, 512]) torch.Size([7, 1, 2]) torch.Size([7, 1, 2])
+        # print(hs.shape, init_reference.shape, inter_references.shape) #shape is torch.Size([B, 512]) torch.Size([7, 1, 2]) torch.Size([7, 1, 2])
 
         # Pass through the fully connected layers to produce logits for x and y coordinates
         x_coord_logits = self.fc_x(hs)  # [B, num_queries, w]
         y_coord_logits = self.fc_y(hs)  # [B, num_queries, h]
 
-        # Option 1: Use maximum logit value as confidence
+        # Use maximum logit value as confidence
         x_max_logits, _ = torch.max(x_coord_logits, dim=-1)  # [B, num_queries]
         y_max_logits, _ = torch.max(y_coord_logits, dim=-1)  # [B, num_queries]
         confidence_scores = x_max_logits + y_max_logits      # [B, num_queries]
@@ -160,20 +181,18 @@ class DeformableBallDetection(nn.Module):
         # Get the index of the most confident query for each sample
         best_query_indices = torch.argmax(confidence_scores, dim=1)  # [B]
 
-        batch_indices = torch.arange(B, device=hs.device)  # Ensure device matches
-        # Index into x_coord_logits and y_coord_logits to get the best predictions
-        x_coord_best = x_coord_logits[batch_indices, best_query_indices, :]  # [B, W]
-        y_coord_best = y_coord_logits[batch_indices, best_query_indices, :]  # [B, H]
+        # Reshape best_query_indices for gather operation
+        best_query_indices = best_query_indices.unsqueeze(1).unsqueeze(-1)  # [B, 1, 1]
 
+        # Gather the best predictions for x and y coordinates
+        x_coord_best = torch.gather(x_coord_logits, 1, best_query_indices.expand(-1, -1, x_coord_logits.size(-1))).squeeze(1)  # [B, w]
+        y_coord_best = torch.gather(y_coord_logits, 1, best_query_indices.expand(-1, -1, y_coord_logits.size(-1))).squeeze(1)  # [B, h]
 
-        # Option 2: If treating outputs as binary logits per coordinate, use sigmoid
-        x_coord_probs = torch.sigmoid(x_coord_best)          # [B, W]
-        y_coord_probs = torch.sigmoid(y_coord_best)          # [B, H]
-                
-        # Output the most confident coordinates
-        output = (x_coord_probs, y_coord_probs)
+        # Optionally, apply sigmoid to normalize the coordinates
+        x_coord_probs = torch.sigmoid(x_coord_best)  # [B, w]
+        y_coord_probs = torch.sigmoid(y_coord_best)  # [B, h]
 
-        return output
+        return (x_coord_probs, y_coord_probs)
 
 
 
@@ -200,7 +219,8 @@ def build_detector(args):
     motion_model = build_motion_model(args)
 
     deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, 
-                                                                motion_model=motion_model, num_queries=args.num_queries, 
+                                                                motion_model=motion_model, 
+                                                                num_queries=args.num_queries, 
                                                                 num_feature_levels=args.num_feature_levels,
                                                                 img_size=args.img_size, num_frames=args.num_frames).to(device)
     return deformable_ball_detection_model
@@ -208,12 +228,12 @@ def build_detector(args):
 
 if __name__ == '__main__':
     from config.config import parse_configs
-    from data_process.dataloader import create_masked_train_val_dataloader
+    from data_process.dataloader import create_occlusion_train_val_dataloader
     device = 'cuda'
     configs = parse_configs()
 
-    train_dataloader, val_dataloader, train_sampler = create_masked_train_val_dataloader(configs) 
-    batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, N, C, H, W]
+    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs) 
+    batch_data, (masked_frameids, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, N, C, H, W]
     B, N, C, H, W = batch_data.shape
     data_reshaped = batch_data.to(device) # shape will be [B, N, C, H, W]
     data_reshaped = data_reshaped.float()
@@ -222,6 +242,6 @@ if __name__ == '__main__':
     deformable_ball_detection = build_detector(configs)
 
 
-    out = deformable_ball_detection(data_reshaped)
+    out, physics_loss = deformable_ball_detection(data_reshaped)
 
-    print(out[0].shape, out[1].shape)
+    print(f"output shape is {out[0].shape} output shape is {out[1].shape}, physcis_loss is {physics_loss}")

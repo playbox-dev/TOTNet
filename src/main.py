@@ -9,11 +9,12 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 
 from tqdm import tqdm
-# from model.deformable_detection_model import build_detector
-from model.propose_model import build_detector
+from model.deformable_detection_model import build_detector
+# from model.propose_model import build_detector
 from model.model_utils import make_data_parallel, get_num_parameters, post_process
-from losses_metrics.losses import Heatmap_Ball_Detection_Loss
-from losses_metrics.metrics import heatmap_calculate_metrics
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss, HeatmapBallDetectionLoss, extract_coords_from_heatmap
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched
+from losses_metrics.physics_loss import PhysicsLoss
 from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float
@@ -101,7 +102,9 @@ def main_worker(gpu_idx, configs):
     best_val_loss = np.inf
     earlystop_count = 0
     is_best = False
-    loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
+    # loss_func = HeatmapBallDetectionLoss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
+    loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1])
+    physics_loss_func = PhysicsLoss(fps=configs.fps)
 
 
     if configs.is_master_node:
@@ -143,17 +146,17 @@ def main_worker(gpu_idx, configs):
             train_sampler.set_epoch(epoch)
         # train for one epoch
     
-        train_loss = train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, logger)
+        train_loss = train_one_epoch(train_loader, model, optimizer, loss_func, physics_loss_func, epoch, configs, logger)
         loss_dict = {'train': train_loss}
 
         if configs.no_val == False:
-            val_loss = evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger)
+            val_loss = evaluate_one_epoch(val_loader, model, loss_func, physics_loss_func, epoch, configs, logger)
             is_best = val_loss <= best_val_loss
             best_val_loss = min(val_loss, best_val_loss)
             loss_dict['val'] = val_loss
 
         if configs.no_test == False:
-            test_loss = evaluate_one_epoch(test_loader, model, loss_func, epoch, configs, logger)
+            test_loss = evaluate_one_epoch(test_loader, model, loss_func, physics_loss_func, epoch, configs, logger)
             loss_dict['test'] = test_loss
         # Write tensorboard
         if tb_writer is not None:
@@ -193,13 +196,15 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, logger):
+def train_one_epoch(train_loader, model, optimizer, loss_func, physics_loss_func, epoch, configs, logger):
     configs = parse_configs()
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
+    heatmap_losses = AverageMeter('Heatmap Loss', ':.4e')
+    physics_losses = AverageMeter('Physics Loss', ':.4e')
 
-    progress = ProgressMeter(len(train_loader), [batch_time, data_time, losses],
+    progress = ProgressMeter(len(train_loader), [batch_time, data_time, losses, heatmap_losses, physics_losses],
                              prefix="Train - Epoch: [{}/{}]".format(epoch, configs.num_epochs))
 
     # switch to train mode
@@ -207,15 +212,23 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
     start_time = time.time()
     
     for batch_idx, (batch_data, (masked_frameids, labels)) in enumerate(tqdm(train_loader)):
-
         data_time.update(time.time() - start_time)
 
         batch_size = batch_data.size(0)
         batch_data = batch_data.to(configs.device)
         labels = labels.to(configs.device)
-        labels = labels.float()
-        output_coords = model(batch_data.float()) # output in shape ([B,W],[B,H]) if output heatmap
-        total_loss = loss_func(output_coords, labels)
+        labels = labels.float() # labels is in shape [B, N, 2]
+        
+        output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+        # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
+        physics_loss = torch.tensor(1e-8, device=configs.device, dtype=torch.float)
+    
+        normalized_physics_loss = physics_loss * 0.01
+        heatmap_loss = loss_func(output_heatmap, labels)
+
+        # rmse_loss = loss_func(output_coords, labels)
+        total_loss = heatmap_loss + physics_loss
+    
 
         # For torch.nn.DataParallel case
         if (not configs.distributed) and (configs.gpu_idx is None):
@@ -228,10 +241,16 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
         optimizer.step()
 
         if configs.distributed:
-            reduced_loss = reduce_tensor(total_loss.data, configs.world_size)
+            reduced_heatmap_loss = reduce_tensor(heatmap_loss, configs.world_size)
+            reduced_physics_loss = reduce_tensor(normalized_physics_loss, configs.world_size)
+            reduced_loss = reduce_tensor(total_loss, configs.world_size)
         else:
-            reduced_loss = total_loss.data
+            reduced_heatmap_loss = heatmap_loss
+            reduced_physics_loss = normalized_physics_loss
+            reduced_loss = total_loss
         losses.update(to_python_float(reduced_loss), batch_size)
+        heatmap_losses.update(to_python_float(reduced_heatmap_loss), batch_size)
+        physics_losses.update(to_python_float(reduced_physics_loss), batch_size)
         # measure elapsed time
         torch.cuda.synchronize()
         batch_time.update(time.time() - start_time)
@@ -243,13 +262,15 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, epoch, configs, l
 
     return losses.avg
 
-def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
+def evaluate_one_epoch(val_loader, model, loss_func, physics_loss_func, epoch, configs, logger):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
-    rmses = AverageMeter('RMSE', ':.4e')
+    heatmap_losses = AverageMeter('Heatmap Loss', ':.4e')
+    physics_losses = AverageMeter('Physics Loss', ':.4e')
+    rmses = AverageMeter('Scaled RMSE', ':.4e')
 
-    progress = ProgressMeter(len(val_loader), [batch_time, data_time, losses, rmses],
+    progress = ProgressMeter(len(val_loader), [batch_time, data_time, losses, heatmap_losses, physics_losses, rmses],
                              prefix="Evaluate - Epoch: [{}/{}]".format(epoch, configs.num_epochs))
     # switch to evaluate mode
     model.eval()
@@ -262,12 +283,18 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             batch_data = batch_data.to(configs.device)
             labels = labels.to(configs.device)
             labels = labels.float()
+            
+            output_heatmap = model(batch_data.float()) # output in shape ([B, N, W],[B, N, H]) if output heatmap
+            
+            # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
+            physics_loss = torch.tensor(1e-8, device=configs.device, dtype=torch.float)
+            normalized_physics_loss = physics_loss * 00.1
 
-            # calculate loss
-            output_coords_logits = model(batch_data.float())
-            total_loss = loss_func(output_coords_logits, labels)
-
-            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_coords_logits, labels, img_height=configs.img_size[0], img_width=configs.img_size[1])
+            heatmap_loss = loss_func(output_heatmap, labels)
+            
+            total_loss = heatmap_loss + normalized_physics_loss
+            
+            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
             rmse_tensor = torch.tensor(rmse).to(configs.device)
 
             # For torch.nn.DataParallel case
@@ -275,13 +302,22 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                 total_loss = torch.mean(total_loss)
 
             if configs.distributed:
-                reduced_loss = reduce_tensor(total_loss.data, configs.world_size)
+                reduced_loss = reduce_tensor(total_loss, configs.world_size)
+                reduced_physics_loss = reduce_tensor(normalized_physics_loss, configs.world_size)
+                reduced_heatmap_loss = reduce_tensor(heatmap_loss, configs.world_size)
                 reduced_rmse = reduce_tensor(rmse_tensor, configs.world_size)
+                
             else:
-                reduced_loss = total_loss.data
+                reduced_heatmap_loss = heatmap_loss
                 reduced_rmse = rmse
+                reduced_physics_loss = normalized_physics_loss
+                reduced_loss = total_loss
+
             losses.update(to_python_float(reduced_loss), batch_size)
+            heatmap_losses.update(to_python_float(reduced_heatmap_loss), batch_size)
+            physics_losses.update(to_python_float(reduced_physics_loss), batch_size)
             rmses.update(to_python_float(reduced_rmse), batch_size)
+
             # measure elapsed time
             torch.cuda.synchronize()
             batch_time.update(time.time() - start_time)

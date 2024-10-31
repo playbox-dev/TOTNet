@@ -6,25 +6,27 @@
 # single node multiple gpu
 python main.py     \
     --num_epochs 30   \
-    --saved_fn 'occluded_mutliframes_train_270_480_motion_2'   \
+    --saved_fn 'normal_tracking_135_240_baseline'   \
     --backbone_choice 'single' \
     --num_feature_levels 1  \
-    --interval 5   \
+    --interval 1   \
     --num_frames 5  \
     --lr 1e-4 \
-    --img_size 270 480 \
+    --img_size 135 240 \
     --num_queries 50    \
-    --batch_size 32 \
-    --transfromer_dmodel 256    \
-    --print_freq 50 \
+    --batch_size 128 \
+    --transfromer_dmodel 512    \
+    --print_freq 20 \
     --dist_url 'tcp://127.0.0.1:29500' \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --world_size 1 \
     --rank 0 \
     --distributed \
-    --no-test    \
-    # --num_samples 1000  \
+    --occluded_prob 0 \
+    --no_test    \
+    # --num_samples 500  \
+    # --no_val    \
 
 # single node single gpu, train data total length
 # python main.py     \

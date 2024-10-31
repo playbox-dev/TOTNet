@@ -31,7 +31,33 @@ class MotionModel(nn.Module):
         motion_features = torch.stack(motion_features, dim=1)
         
         return motion_features
+    
 
+class TemporalConvNet(nn.Module):
+    def __init__(self, input_channels):
+        super(TemporalConvNet, self).__init__()
+        self.tcn = nn.Conv1d(input_channels, input_channels, kernel_size=3, padding=1)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape [B, N, C, H, W]
+        Returns:
+            output: Tensor of shape [B, N, C, H, W] after applying temporal convolution
+        """
+        B, N, C, H, W = x.shape
+
+        # Reshape to [B*H*W, C, N] to apply temporal convolution across frames for each spatial location
+        x = x.permute(0, 3, 4, 2, 1).contiguous()  # [B, H, W, C, N]
+        x = x.view(B * H * W, C, N)  # [B*H*W, C, N]
+
+        # Apply temporal convolution
+        x = self.tcn(x)  # [B*H*W, C, N]
+
+        # Reshape back to [B, N, C, H, W]
+        x = x.view(B, H, W, C, N).permute(0, 4, 3, 1, 2).contiguous()  # [B, N, C, H, W]
+
+        return x
 def build_motion_model(args):
     motion_model = MotionModel()
     return motion_model

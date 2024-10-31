@@ -2,6 +2,7 @@ import os
 import json
 import sys
 from collections import Counter
+from collections import defaultdict
 
 import cv2
 from sklearn.model_selection import train_test_split
@@ -158,7 +159,7 @@ def get_events_infor(game_list, configs, dataset_type):
     return events_infor, events_labels
 
 
-def get_all_detection_infor(game_list, configs, dataset_type):
+def get_all_detection_infor_bidirect(game_list, configs, dataset_type):
     num_frames_from_event = (configs.num_frames - 1) // 2
     interval = configs.interval  # Get interval value from configs
 
@@ -166,6 +167,9 @@ def get_all_detection_infor(game_list, configs, dataset_type):
     images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
     events_infor = []
     events_labels = []
+    skipped_frame = 0
+    # Initialize a counter for occurrences of [-1, -1]
+    invalid_count_tracker = defaultdict(int)
 
     def find_next_valid_frame(start_idx, game_name):
         """Find the next available frame file from the given start index."""
@@ -207,16 +211,91 @@ def get_all_detection_infor(game_list, configs, dataset_type):
                 print(f'No ball position for frame idx {ball_frameidx}.')
                 continue
 
-            # Get the ball position
-            ball_position_xy = ball_annos[str(ball_frameidx)]
-            ball_position_xy = np.array([ball_position_xy['x'], ball_position_xy['y']], dtype=int)
+            ball_positions = []
+            invalid_count = 0  # Track the number of [-1, -1] in this event
+            for idx in sub_ball_frame_indices:
+                # Find the next valid frame if the current one doesn't exist
+                valid_idx = find_next_valid_frame(idx, game_name)
+                if str(valid_idx) not in ball_annos:
+                    ball_positions.append(np.array([-1, -1], dtype=int))
+                    invalid_count += 1  # Increment invalid count
+                else:
+                    ball_position_xy = ball_annos[str(valid_idx)]
+                    ball_position_xy = np.array([ball_position_xy['x'], ball_position_xy['y']], dtype=int)
+                    ball_positions.append(ball_position_xy)
 
-            # Ignore events with invalid ball positions
-            if (ball_position_xy[0] < 0) or (ball_position_xy[1] < 0):
-                continue
+            # Track the number of invalid frames for this event
+            invalid_count_tracker[invalid_count] += 1 
+            # Check if the middle frame label is [-1, -1]
+            middle_idx = len(ball_positions) // 2
+            
+            if (ball_positions[middle_idx] == np.array([-1, -1])).all():
+                # print(f"Skipping event at frame {ball_frameidx} due to invalid middle label.")
+                skipped_frame += 1
+                continue  # Skip this event if the middle frame is invalid
 
             events_infor.append(img_path_list)
-            events_labels.append(ball_position_xy)
+            events_labels.append(ball_positions)
+    print(f"{skipped_frame} skipped frame due to due to invalid middle label")
+    # Print the occurrences of [-1, -1] across events
+    print("Count of [-1, -1] occurrences in events:")
+    for count, occurrence in sorted(invalid_count_tracker.items()):
+        print(f"{count} occurrence(s) of [-1, -1]: {occurrence} event(s)")
+    return events_infor, events_labels
+
+
+
+def get_all_detection_infor(game_list, configs, dataset_type):
+    num_frames = configs.num_frames - 1
+
+    annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
+    images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+
+    for game_name in game_list:
+        ball_annos_path = os.path.join(annos_dir, game_name, 'ball_markup.json')
+
+        # Load ball annotations
+        with open(ball_annos_path) as json_ball:
+            ball_annos = json.load(json_ball)
+
+        for ball_frameidx, ball_location in ball_annos.items():
+            ball_frameidx = int(ball_frameidx)
+
+            # Create frame indices with the correct interval, with the key frame as the last frame
+            sub_ball_frame_indices = [
+                ball_frameidx - (num_frames - i) # Adjust to start from earlier frames
+                for i in range(num_frames + 1)
+            ]
+
+            img_path_list = []
+            for idx in sub_ball_frame_indices:
+                img_path = os.path.join(images_dir, game_name, f'img_{idx:06d}.jpg')
+                img_path_list.append(img_path)
+        
+            # Check if any valid frames were found
+            if not img_path_list:
+                print(f"No valid frames found for event at frame {ball_frameidx}.")
+                continue
+
+            # Check if the ball position exists for the target frame
+            if str(ball_frameidx) not in ball_annos:
+                print(f'No ball position for frame idx {ball_frameidx}.')
+                continue
+            
+            ball_position = np.array([ball_location['x'], ball_location['y']], dtype=int)
+       
+            if (ball_position  == np.array([-1, -1])).all():
+                # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+                skipped_frame += 1
+                continue  # Skip this event if the last frame is invalid
+
+            events_infor.append(img_path_list)
+            events_labels.append(ball_position)
+
+    print(f"{skipped_frame} skipped frame due to due to invalid last label")
 
     return events_infor, events_labels
 
@@ -227,6 +306,7 @@ def train_val_data_separation(configs):
     """Seperate data to training and validation sets"""
     dataset_type = 'training'
     events_infor, events_labels = get_all_detection_infor(configs.train_game_list, configs, dataset_type)
+
     if configs.no_val:
         train_events_infor = events_infor
         train_events_labels = events_labels
@@ -246,8 +326,27 @@ if __name__ == '__main__':
     from config.config import parse_configs
 
     configs = parse_configs()
-    train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
-    print(len(train_events_infor), len(train_events_labels))
+    configs.num_frames = 5
+    configs.interval = 1
+    # train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
+    # print(len(train_events_infor), len(train_events_labels))
+
+    dataset_type = 'test'
+    test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
+    
+    # print(train_events_infor[28])
+    # print(train_events_labels[28])
+    # Initialize counters
+    contains_negative_one = 0
+    does_not_contain_negative_one = 0
+
+    for i, labels in enumerate(test_events_labels):
+        # Calculate the middle frame index
+        last_frame_idx = len(labels) - 1 # Integer division to get the middle frame
+
+        # Check if the middle frame label is [-1, -1]
+        if (labels[last_frame_idx] == [-1, -1]).all():
+            print(f"Event {i}: Last frame has label [-1, -1]")
     # print('Counter train_events_labels: {}'.format(Counter(train_events_labels)))
     # if val_events_labels is not None:
     #     print('Counter val_events_labels: {}'.format(Counter(val_events_labels)))

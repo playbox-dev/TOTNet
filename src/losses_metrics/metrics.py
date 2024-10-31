@@ -1,6 +1,6 @@
 import torch
 
-def heatmap_calculate_metrics(pred_logits, target_coords, img_width, img_height):
+def heatmap_calculate_metrics(pred_logits, target_coords, scale=None):
     """
     Calculates evaluation metrics between predicted logits for x and y coordinates
     and target pixel coordinates (integers).
@@ -10,8 +10,7 @@ def heatmap_calculate_metrics(pred_logits, target_coords, img_width, img_height)
         - pred_x_logits: Tensor of shape [B, W] with predicted logits for x-axis
         - pred_y_logits: Tensor of shape [B, H] with predicted logits for y-axis
     - target_coords: Tensor of shape [B, 2] with ground truth (x, y) coordinates (integers)
-    - img_width: Image width in pixels
-    - img_height: Image height in pixels
+    - scale: Tensor
     
     Returns:
     - mse: Mean Squared Error
@@ -35,6 +34,9 @@ def heatmap_calculate_metrics(pred_logits, target_coords, img_width, img_height)
 
     # Stack the predicted x and y coordinates
     pred_coords = torch.stack([x_pred, y_pred], dim=1)  # [B, 2]
+
+    if scale is not None:
+        pred_coords = pred_coords * scale
 
     # Convert target coordinates to float
     target_coords = target_coords.float()
@@ -83,3 +85,32 @@ def calculate_rmse(original_x, original_y, rescaled_x_pred, rescaled_y_pred):
     rmse = torch.sqrt(squared_error)
 
     return rmse.item()
+
+def calculate_rmse_batched(pred_coords, label_coords):
+    """
+    Calculates the RMSE between predicted coordinates and ground truth labels for a batch.
+
+    Args:
+        pred_coords (tensor): Predicted coordinates of shape [B, 2].
+        label_coords (tensor): Ground truth coordinates of shape [B, 2].
+
+    Returns:
+        rmse (float): Mean RMSE across the batch.
+    """
+
+    # Ensure both tensors are on the same device
+    pred_coords = pred_coords.to(label_coords.device)
+
+    # Calculate the squared differences for x and y
+    squared_diff = (pred_coords - label_coords) ** 2  # [B, 2]
+
+    # Sum the squared differences along the coordinate axis (x and y)
+    sum_squared_diff = torch.sum(squared_diff, dim=-1)  # [B]
+
+    # Take the square root to get RMSE for each sample
+    rmse_per_sample = torch.sqrt(sum_squared_diff)  # [B]
+
+    # Calculate the mean RMSE across the batch
+    mean_rmse = torch.mean(rmse_per_sample)
+
+    return mean_rmse.item()

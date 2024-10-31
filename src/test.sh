@@ -5,13 +5,14 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'occluded_mutliframes_train_270_480_motion_2' \
+  --saved_fn 'normal_tracking_135_240_baseline' \
   --gpu_idx 0   \
   --num_queries 50    \
   --batch_size 16   \
-  --transfromer_dmodel 256    \
-  --img_size 270 480    \
+  --transfromer_dmodel 512    \
+  --img_size 135 240    \
   --num_frames 5  \
-  --interval 5   \
-  --pretrained_path ../checkpoints/occluded_mutliframes_train_270_480_motion_2/occluded_mutliframes_train_270_480_motion_2_best.pth \
+  --interval 1   \
+  --occluded_prob 0 \
+  --pretrained_path '../checkpoints/normal_tracking_135_240_baseline/normal_tracking_135_240_baseline_best.pth' \
 

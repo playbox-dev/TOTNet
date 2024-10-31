@@ -8,7 +8,7 @@ from torch.nn.init import xavier_uniform_, constant_, uniform_, normal_
 sys.path.append('../')
 from model.ops.modules.ms_deform_attn import DeformAttn
 from model.backbone_positional_encoding import create_positional_encoding
-from model.temporal_model import ConvLSTM_Model
+from model.temporal_model import PixelTemporalSelfAttention, TemporalDeformableSelfAttentionEncoder
 from utils.misc import inverse_sigmoid
 
 class Transformer(nn.Module):
@@ -27,7 +27,9 @@ class Transformer(nn.Module):
         self.encoder = Encoder(encoder_layer, num_encoder_layers)
 
         # temporal model
-        # self.temporal_model = ConvLSTM_Model(input_channels=self.d_model, hidden_channels=[self.d_model, self.d_model, self.d_model], output_channels=self.d_model, num_layers=3)
+        self.temporal_model = PixelTemporalSelfAttention(self.d_model, self.nhead, num_encoder_layers)
+        # self.temporal_model = TemporalDeformableSelfAttentionEncoder(d_model=d_model, d_ffn=dim_feedforward, dropout=dropout,
+        #                                                              activation=activation, n_levels=num_encoder_layers)
 
         decoder_layer = DecoderLayer(d_model=d_model, d_ffn=dim_feedforward, 
                                      dropout=dropout, activation=activation, n_levels=num_feature_levels, n_heads=nhead, n_points=enc_n_points)
@@ -99,24 +101,20 @@ class Transformer(nn.Module):
         mask_flatten = None 
         # memory shape [B*N, H*W, d_model]
         memory = self.encoder(src_flatten, spatial_shapes, level_start_index, valid_ratios, lvl_pos_embed_flatten, mask_flatten)
-        bs, _, c = memory.shape
+        bs, HW, c = memory.shape
         # print(f"memory shape is {memory.shape}")
         B, N = self.batch_size, self.num_frames
-
-        # memory = memory.view(B, N, h, w, c)
-        # temporal_spatial_output = self.temporal_model(memory) # shape [B, H*W, C]
-
+        memory = memory.view(B, N, HW, c)
+        # go through temporal model which is deformable temporal model where we utilize other frame information
+        memory = self.temporal_model(memory) # this will output shape [B, HW, C]
 
         query_embed, tgt = torch.split(query_embed, c, dim=1)
-        query_embed = query_embed.unsqueeze(0).expand(bs, -1, -1)
-        tgt = tgt.unsqueeze(0).expand(bs, -1, -1)
-        reference_points = self.reference_points(query_embed).sigmoid()
-
+        query_embed = query_embed.unsqueeze(0).expand(B, -1, -1)
+        tgt = tgt.unsqueeze(0).expand(B, -1, -1)
+        reference_points = self.reference_points(query_embed).sigmoid() # shape [B, num_queries, 2]
+        valid_ratios = valid_ratios[:B, :, :]
         init_reference_out = reference_points
-        # valid_ratios= valid_ratios[:B]  # Extract valid ratios for the batch
-
-        # print(f"""temporal_spatial_output shape is {temporal_spatial_output.shape}, tgt shape {tgt.shape}, 
-            #   reference_points shape {reference_points.shape}, query_embed shape {query_embed.shape}, valid_rations {valid_ratios.shape}""")
+    
         hs, inter_references = self.decoder(tgt, reference_points, memory,
                                             spatial_shapes, level_start_index, valid_ratios, query_embed, mask_flatten)
         
@@ -211,8 +209,9 @@ class Encoder(nn.Module):
             valid_ratios: [B*N, Number of feature level, 2]
         """
         output = src
+        # references shape [B*N, HW, 1 2]
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=src.device)
-        
+
         for _, layer in enumerate(self.layers):
             output = layer(output, pos, reference_points, spatial_shapes, level_start_index, padding_mask)
 
@@ -259,7 +258,6 @@ class DecoderLayer(nn.Module):
         tgt2 = self.self_attn(q.transpose(0, 1), k.transpose(0, 1), tgt.transpose(0, 1))[0].transpose(0, 1)
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
-
         # cross attention
         tgt2 = self.cross_attn(self.with_pos_embed(tgt, query_pos),
                                reference_points,
@@ -364,9 +362,9 @@ if __name__ == '__main__':
 
 
     transformer=build_transformer(configs)
-    dummy_input = [torch.randn([64, 512, 9, 15], device=device, dtype=torch.float32)]
-    masks = [torch.zeros([64, 9, 15], device=device, dtype=torch.int)]
-    pos_embedding = [torch.randn([64, 512, 9, 15], device=device, dtype=torch.float32)]
+    dummy_input = [torch.randn([72, 512, 9, 15], device=device, dtype=torch.float32)]
+    masks = [torch.zeros([72, 9, 15], device=device, dtype=torch.int)]
+    pos_embedding = [torch.randn([72, 512, 9, 15], device=device, dtype=torch.float32)]
     query_embedding = torch.randn([1, 1024], device=device, dtype=torch.float32)
 
     output, _, _ = transformer(dummy_input, masks, pos_embedding, query_embedding)

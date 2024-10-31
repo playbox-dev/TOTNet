@@ -5,5 +5,5 @@
 
 
 # python temporal_transformer.py
-python propose_model.py
-# python temporal_model.py
+# python propose_model.py
+python temporal_model.py

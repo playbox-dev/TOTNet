@@ -179,7 +179,6 @@ class Occlusion_Dataset(Dataset):
         imgs = []
         for img_path in img_path_list:
             img = cv2.imread(img_path)
-
             if img is None:
                 raise ValueError(f"Image not found or can't be read at path: {img_path}")
             imgs.append(img)
@@ -192,20 +191,16 @@ class Occlusion_Dataset(Dataset):
             # after transform all images will be in shape (H, W, C)
             img = np.transpose(img, (2, 0, 1))  # Now img is (C, H, W)
             converted_imgs.append(img)
-        # stack them to form the shape (1,num_frames, C, H, W)
-        # numpy_imgs = np.stack(converted_imgs, axis=0)  # Stack along the new axis (N)
-        # convert them into pairs formation
-        # add a padded frame so the number is equal and can be processed with, only when the images is in odd length
+      
         image_list=[]
 
-        masked_frameid = len(converted_imgs)//2 
+        masked_frameid = len(converted_imgs)-1
         i = 0
         while i < len(converted_imgs):
             image_list.append(np.array(converted_imgs[i]))
             i+=1
         
         image_list_np = np.array(image_list)
-        masked_frame = np.array(converted_imgs[masked_frameid])
         return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)))
 
 

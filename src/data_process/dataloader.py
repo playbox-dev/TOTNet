@@ -11,7 +11,7 @@ sys.path.append('../')
 
 from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset
 from data_process.data_utils import get_all_detection_infor, train_val_data_separation
-from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask
+from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask, RandomColorJitter
 
 
 def create_train_val_dataloader(configs):
@@ -219,7 +219,9 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
 
     train_transform = Compose([
         Resize(new_size=configs.img_size, p=1.0),
-        Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
+        RandomColorJitter(p=0.25),
+        Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
+        Random_Crop(max_reduction_percent=0.2, p=0.25),
     ], p=1.)
 
     # Load train and validation data information
@@ -249,7 +251,7 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
     if not configs.no_val:
         val_transform = Compose([
             Resize(new_size=configs.img_size, p=1.0),
-            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
+            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
         ], p=1.)
         val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
                                      num_samples=configs.num_samples)
@@ -275,7 +277,7 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
 
     test_transform = Compose([
             Resize(new_size=configs.img_size, p=1.0),
-            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=0.25),
+            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
         ], p=1.)
     dataset_type = 'test'
     test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
@@ -336,25 +338,29 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (1080, 1920)
-    configs.interval = 10
+    configs.img_size = (135, 240)
+    configs.interval = 1
     configs.num_frames = 5
+
+    # Adjust ball position
+    w_ratio = 1920 / configs.img_size[1] # New width divided by original width
+    h_ratio = 1080 / configs.img_size[0] # New height divided by original height
+
 
 
     # Create Masked dataloaders 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
     print('len train_dataloader: {}, val_dataloader: {}'.format(len(train_dataloader), len(val_dataloader)))
-
-    test_dataloader = create_occlusion_test_dataloader(configs)
+    
+    test_dataloader = create_occlusion_test_dataloader(configs, configs.num_samples)
     print(f"len test_loader {len(test_dataloader)}")
-
 
     batch_data, (masked_frameids, labels) = next(iter(train_dataloader))
 
     # Check the shapes
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
     print(f'Batch labels shape: {labels.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
-    print(masked_frameids, labels)
+    print(masked_frameids, labels, labels[0][0]*h_ratio, labels[0][1]*w_ratio)
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]
 
@@ -373,8 +379,8 @@ if __name__ == '__main__':
     # Loop over each sample in the batch
     for batch_index in range(batch_data.shape[0]):
         sample_data = batch_data[batch_index]  # Shape: [N, C, H, W]
-        masked_image = sample_data[configs.num_frames//2]  # Shape: [C, H, W]
-        ball_xy = labels[batch_index].cpu().numpy()  # Ball coordinates for this sample
+        masked_image = sample_data[configs.num_frames-1]  # Shape: [C, H, W]
+        ball_xy = labels[batch_index].cpu().numpy()  # Ball coordinates for this sample, as a list
 
         # Collect all frames (original and masked) for visualization
         frame_images = []
@@ -387,14 +393,14 @@ if __name__ == '__main__':
         # Add the masked frame with ball position
         masked_frame = np.transpose(masked_image.cpu().numpy(), (1, 2, 0))  # Convert to [H, W, C]
         img_with_ball = cv2.circle(masked_frame.copy(), tuple(ball_xy), radius=5, color=(255, 0, 0), thickness=2)
-        img_with_ball = cv2.cvtColor(img_with_ball, cv2.COLOR_RGB2BGR)  # Convert to BGR for saving
+        # img_with_ball = cv2.cvtColor(img_with_ball, cv2.COLOR_RGBR)  # Convert to BGR for saving
         frame_images.append(img_with_ball)  # Add the masked frame to the list
 
         # Concatenate all frames horizontally
         combined_image = concatenate_images_horizontally(frame_images)
 
         # Save the combined image
-        output_path = os.path.join(out_images_dir, f'batch_{batch_index}_combined.jpg')
+        output_path = os.path.join(out_images_dir, f'test_batch_{batch_index}_combined.jpg')
         cv2.imwrite(output_path, combined_image)
 
     print("All combined images saved successfully.")
