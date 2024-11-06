@@ -36,22 +36,18 @@ class DeformableBallDetection(nn.Module):
         self.transformer = transformer
         self.hidden_dim = transformer.d_model
         self.motion_model = motion_model
+        if backbone is not None:
+            self.backbone = backbone
 
-        self.coordinates_embed = nn.Linear(self.hidden_dim, 2)
         self.num_feature_levels = num_feature_levels
-        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax()
 
-        # Learnable scalar weights for each frame in the sequence
-        self.frame_weights = nn.Parameter(torch.ones(num_frames))  # Shape: [num_frames]
-        
         # Feature extractor layers here...
         self.fc_x = nn.Linear(in_features=self.hidden_dim, out_features=img_size[1])  # Predicts x-coordinate
         self.fc_y = nn.Linear(in_features=self.hidden_dim, out_features=img_size[0])  # Predicts y-coordinate
-        self.fc = nn.Linear(in_features=self.hidden_dim, out_features=2)  # where `aggregated_features_dim` is the hidden dimension size
 
         # set query embeddings
         self.query_embed = nn.Embedding(num_queries, self.hidden_dim*2)
-        self.backbone = backbone
 
         # set input projection
         if num_feature_levels > 1:
@@ -71,7 +67,7 @@ class DeformableBallDetection(nn.Module):
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
             self.input_proj = nn.ModuleList([nn.Sequential(
-                nn.Conv2d(backbone.out_channels, self.hidden_dim, kernel_size=1),
+                nn.Conv2d(512, self.hidden_dim, kernel_size=1),
                 nn.GroupNorm(32, self.hidden_dim),
             )])
 
@@ -139,22 +135,23 @@ class DeformableBallDetection(nn.Module):
         # first step is to split the tensor based on pair
         B, N, C, H, W = samples.shape
         # get motion features
-        motion_features = self.motion_model(samples) # [B, N-1, C, H, W]
+        # motion_features = self.motion_model(samples) # [B, N-1, C, H, W]
         # reshape to [B*N-1, C, H, W] then add extra dimension for the multiple feature level
         # motion_features = motion_features.view(B*(N-1), motion_features.size(2), motion_features.size(3), motion_features.size(4)).unsqueeze(dim=0)
         # get feature map from backbone
         # samples = samples.view(B*N, C, H, W) # [B*N, C, H, W]
-        combined_samples = self.combine_motion_featuremaps(motion_features, samples).view(B*N, C, H, W)
-        features_combined = self.backbone(combined_samples) # Expect it to output feature map which will be in shape [Number of feature level, B*N, C, H, W]
+        # combined_samples = self.combine_motion_featuremaps(motion_features, samples).view(B*N, C, H, W)
+        # features_combined = self.backbone(combined_samples) # Expect it to output feature map which will be in shape [Number of feature level, B*N, C, H, W]
         # combine both motion and feature maps for better prediction'
         # features_reshaped = features.squeeze(0).view(B,N,features.size(2),features.size(3),features.size(4))
         # # print(f"motion features in shape {motion_features.shape}, feature maps in shape {features.shape}")
-        # features_combined = self.combine_motion_featuremaps(motion_features, features_reshaped)
-        # features_combined = features_combined.view(B*N, features_reshaped.size(2),features_reshaped.size(3),features_reshaped.size(4)).unsqueeze(0)
+
+        spaital_temporal_features = [self.motion_model(samples)]  # this will output [B*N, C, H, W] # make it a list
+        
         srcs = []
         masks = []
         poses = []
-        for layer, feat in enumerate(features_combined):
+        for layer, feat in enumerate(spaital_temporal_features):
             projected_feature = self.input_proj[layer](feat)
             srcs.append(projected_feature)
             # all regions are valid so all pixels are 0
@@ -214,11 +211,11 @@ class MLP(nn.Module):
 def build_detector(args):
     device = torch.device(args.device)
 
-    chosen_feature_extractor = build_backbone(args)
+    # chosen_feature_extractor = build_backbone(args)
     transformer = build_transformer(args)
     motion_model = build_motion_model(args)
 
-    deformable_ball_detection_model = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, 
+    deformable_ball_detection_model = DeformableBallDetection(backbone=None, transformer=transformer, 
                                                                 motion_model=motion_model, 
                                                                 num_queries=args.num_queries, 
                                                                 num_feature_levels=args.num_feature_levels,
@@ -229,13 +226,13 @@ def build_detector(args):
 if __name__ == '__main__':
     from config.config import parse_configs
     from data_process.dataloader import create_occlusion_train_val_dataloader
-    device = 'cuda'
     configs = parse_configs()
+    configs.device = 'cpu'
 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs) 
     batch_data, (masked_frameids, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, N, C, H, W]
     B, N, C, H, W = batch_data.shape
-    data_reshaped = batch_data.to(device) # shape will be [B, N, C, H, W]
+    data_reshaped = batch_data.to(configs.device) # shape will be [B, N, C, H, W]
     data_reshaped = data_reshaped.float()
     print(f"data shape is {data_reshaped.shape}")
 

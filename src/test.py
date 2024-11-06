@@ -16,9 +16,10 @@ sys.path.append('./')
 
 from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
-from model.deformable_detection_model import build_detector
-# from model.propose_model import build_detector
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse
+# from model.deformable_detection_model import build_detector
+from model.propose_model import build_detector
+# from model.tracknet import build_TrackerNet
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched
 from utils.misc import AverageMeter
 from config.config import parse_configs
 
@@ -67,6 +68,7 @@ def main_worker(gpu_idx, configs):
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
     model = build_detector(configs)
+    # model = build_TrackerNet(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -110,10 +112,18 @@ def test(test_loader, model, configs):
             labels = labels.float()
             # compute output
 
-            output_coords = model(batch_data.float()) # output in shape ([B, N, W],[B, N, H]) if output heatmap
+            # #for tracknet we need to rehsape the data
+            # B, N, C, H, W = batch_data.shape
+            # # Permute to bring frames and channels together
+            # batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+            # # Reshape to combine frames into the channel dimension
+            # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+
+            output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
         
-            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_coords, labels)
-            pred_x_logits, pred_y_logits = output_coords
+            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
+            pred_x_logits, pred_y_logits = output_heatmap
+
 
             for sample_idx in range(batch_size):
                 pred_x_logit = pred_x_logits[sample_idx]  # Shape: [W]

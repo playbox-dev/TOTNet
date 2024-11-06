@@ -4,10 +4,13 @@ import torchvision.models as models
 import torch.nn.functional as F
 from torchvision.ops.feature_pyramid_network import FeaturePyramidNetwork, LastLevelMaxPool
 from collections import OrderedDict
+import sys
+sys.path.append('../')
+
 
 
 class MultiLevelSpatialFeatureExtractor(nn.Module):
-    def __init__(self, pretrained=True, out_channels=256):
+    def __init__(self, pretrained=True, out_channels=256, finetune=False):
         """
         Initializes the SpatialFeatureExtractor with ResNet-50 backbone and FPN.
 
@@ -20,9 +23,14 @@ class MultiLevelSpatialFeatureExtractor(nn.Module):
         # Load pre-trained ResNet-50
         if pretrained:
             resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-            resnet.eval()  # Set to evaluation mode
         else:
             resnet = models.resnet50(weights=None)
+        if finetune:
+            resnet = resnet.train()
+        else:
+            resnet = resnet.eval()
+            for param in resnet.parameters():
+                param.requires_grad = False
         
         # Extract layers from ResNet-50 backbone
         self.backbone = nn.Sequential(
@@ -82,6 +90,12 @@ class SingleLevelSpatialFeatureExtractor(nn.Module):
         
         # Load pre-trained ResNet-50
         resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT if pretrained else None)
+        if finetune:
+            resnet.train()
+        else:
+            resnet.eval()
+            for param in resnet.parameters():
+                param.requires_grad = False
 
         # Extract layers up to the specified layer  
         layers = []
@@ -114,6 +128,7 @@ def create_positional_encoding(feature):
         Tensor: Positional encoding of the same shape as the input feature
     """
     # Get the last three dimensions (C, H, W) from the input
+
     batch_size, channels, height, width = feature.size()
 
     device = feature.device
@@ -155,9 +170,9 @@ class ChosenFeatureExtractor(nn.Module):
         self.num_channels = [512, 1024, 2048]
         self.num_backbone_outputs = num_feature_levels-1
         if choice == "multi":
-            self.spatialExtractor = MultiLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels)
+            self.spatialExtractor = MultiLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels, finetune=False)
         elif choice == "single":
-            self.spatialExtractor = SingleLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels)
+            self.spatialExtractor = SingleLevelSpatialFeatureExtractor(pretrained, out_channels=out_channels, finetune=False)
     
     def forward(self, x):
         """
@@ -180,18 +195,24 @@ if __name__ == '__main__':
     # Instantiate the backbone and positional encoding
     # multiLevelbackbone = MultiLevelSpatialFeatureExtractor(pretrained=True, out_channels=256)
     # singleLevelbackbone = SingleLevelSpatialFeatureExtractor(pretrained=True, level=-2)
-    chosenFramesBackbone = ChosenFeatureExtractor(choice="single")
+    from config.config import parse_configs
+    from data_process.dataloader import create_occlusion_train_val_dataloader
+    configs = parse_configs()
+    configs.device = 'cpu'
+    configs.backbone_choice = 'multi'
+    configs.num_feature_levels = 3
+    chosenFramesBackbone = build_backbone(configs)
     # Create dummy input frames
     batch_size = 2
-    pair_number = 3
-    frame1 = torch.randn(batch_size * pair_number, 3, 1080, 1920)  # [Batch * Pair number, 3, H, W]
-    frame2 = torch.randn(batch_size * pair_number, 3, 1080, 1920)
-
+    num_frames = 9
+    dummy_input = torch.randn([batch_size*num_frames, 3, 135, 240], device='cpu')
+    dummy_input = dummy_input.float()
+  
     # Forward pass through the backbone
     with torch.no_grad():  # Disable gradient computation for testing
         # fpn_features_frame1, fpn_features_frame2 = multiLevelbackbone(frame1, frame2)
         # single_feature_frame1, single_feature_frame2 = singleLevelbackbone(frame1, frame2)
-        feature_frame1, feature_frame2 = chosenFramesBackbone(frame1), chosenFramesBackbone(frame2)
+        output = chosenFramesBackbone(dummy_input )
 
     # Verify output shapes
     # for name, feature in fpn_features_frame1.items():
@@ -199,51 +220,7 @@ if __name__ == '__main__':
     #     pos = create_positional_encoding(feature)
     #     print(f"{name}: {feature.shape}, pos {pos.shape}") # Expected shape [B*P, out_channels, height, width], pos shape [1, out_channels, height, width]
     
-    pos = create_positional_encoding(feature_frame1)
-    print(f"single feature map shape 1 {feature_frame1.shape}, single feature map shape 2 {feature_frame2.shape}, pos {pos.shape}")
+    print(f"single feature map shape 1 {output[0].shape, output[1].shape, output[2].shape}")
         
     
-    # print(f"Positional Encoding Map Shape: {positional_encoding.shape}")  # Expected: [14, 2048, 34, 60]
-
-
-
-    # import matplotlib.pyplot as plt
-
-    # # Instantiate the positional encoding module
-    # channels = 2048
-    # height = 34
-    # width = 60
-    # pos_encoding_module = PositionEncoding2D(channels=channels, height=height, width=width)
-    # # Access the positional encoding tensor
-    # pos_encoding = pos_encoding_module.pos_encoding  # Shape: [1, C, H, W]
-
-
-    # # Define a list of channels to visualize
-    # channels_to_visualize = [
-    #     (0, 'Channel 0 (Sine x-axis)'),
-    #     (1, 'Channel 1 (Cosine x-axis)'),
-    #     (2, 'Channel 2 (Sine y-axis)'),
-    #     (3, 'Channel 3 (Cosine y-axis)')
-    # ]
-
-    # # Iterate through the selected channels, visualize, and save each
-    # for idx, title in channels_to_visualize:
-    #     # Extract the positional encoding for the current channel
-    #     pe_channel = pos_encoding[0, idx].cpu().numpy()  # Convert to NumPy for plotting
-        
-    #     # Create the plot
-    #     plt.figure(figsize=(6, 4))
-    #     plt.imshow(pe_channel, cmap='viridis', aspect='auto')
-    #     plt.title(f'Positional Encoding - {title}')
-    #     plt.colorbar()
-        
-    #     # Save the figure
-    #     filename = f'pos_encoding_channel_{idx}.png'
-    #     plt.savefig(filename, bbox_inches='tight')
-    #     print(f"Saved {filename}")
-        
-    #     # Display the plot
-    #     plt.show()
-        
-    #     # Close the figure to free up memory
-    #     plt.close()
+   

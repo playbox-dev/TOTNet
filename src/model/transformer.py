@@ -11,13 +11,12 @@ from model.backbone_positional_encoding import create_positional_encoding
 from utils.misc import inverse_sigmoid
 
 class Transformer(nn.Module):
-    def __init__(self, channels=2048, d_model=512, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, 
+    def __init__(self, d_model=512, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, 
                  dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4):
         super(Transformer, self).__init__()
 
         self.d_model = d_model
         self.nhead = nhead
-        self.embedder_layer = nn.Linear(channels, d_model)
         encoder_layer = EncoderLayer(d_model, dim_feedforward,
                                                           dropout, activation,
                                                           num_feature_levels, nhead, enc_n_points)
@@ -336,7 +335,7 @@ def get_valid_ratio(mask):
 
 
 def build_transformer(args):
-    transformer = Transformer(channels=args.backbone_out_channels, d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, 
+    transformer = Transformer(d_model=args.transfromer_dmodel, nhead=args.transformer_nhead, 
                               num_feature_levels=args.num_feature_levels).to(args.device)
     return transformer
 

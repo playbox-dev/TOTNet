@@ -338,9 +338,9 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (135, 240)
+    configs.img_size = (360, 640)
     configs.interval = 1
-    configs.num_frames = 5
+    configs.num_frames = 3
 
     # Adjust ball position
     w_ratio = 1920 / configs.img_size[1] # New width divided by original width

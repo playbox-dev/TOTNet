@@ -103,7 +103,9 @@ class DeformableBallDetection(nn.Module):
         # first step is to split the tensor based on pair
         B, N, C, H, W = samples.shape
         samples = samples.view(B*N, C, H, W)
-        features = self.backbone(samples)  # Expect it to output feature map
+        with torch.no_grad():
+            features = self.backbone(samples)  # Expect it to output feature map
+
         srcs = []
         masks = []
         poses = []
@@ -147,10 +149,9 @@ class DeformableBallDetection(nn.Module):
         x_coord_best = x_coord_logits[batch_indices, best_query_indices, :]  # [B, W]
         y_coord_best = y_coord_logits[batch_indices, best_query_indices, :]  # [B, H]
 
-
-        # Option 2: If treating outputs as binary logits per coordinate, use sigmoid
-        x_coord_probs = torch.sigmoid(x_coord_best)          # [B, W]
-        y_coord_probs = torch.sigmoid(y_coord_best)          # [B, H]
+        # Option 2: If treating outputs as binary logits per coordinate, use sigmoid/softmax to get he output 
+        x_coord_probs = torch.softmax(x_coord_best, dim=-1)          # [B, W]
+        y_coord_probs = torch.softmax(y_coord_best, dim=-1)          # [B, H]
                 
         # Output the most confident coordinates
         output = (x_coord_probs, y_coord_probs)
@@ -225,40 +226,21 @@ def build_detector(args):
 
 if __name__ == '__main__':
     from config.config import parse_configs
-    from data_process.dataloader import create_train_val_dataloader, create_masked_train_val_dataloader, draw_image_with_ball
+    from data_process.dataloader import create_occlusion_train_val_dataloader
 
-    device = 'cuda'
     configs = parse_configs()
-    # Create dataloaders
-    # train_dataloader, val_dataloader, train_sampler = create_train_val_dataloader(configs)
-    # batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader))
-    # # the dataloader exports data with shape [Batch, Num_of_pairs, num_images, C, H, W]
-    # # where if we have total 9 frames, middle frame frame 5 will be masked, which leaves us 7 pairs they are
-    # # [1,2], [2,3], [3,4], [4,6], [6,7], [7,8], [8,9] so for each batch it will contain this much of frames
-    # # for example if we have batch 1, by suqeezing, we will have [7, 2, C,H, W], if batch is 8, we will have [56, 2, C, H, W]
-    # B, num_pairs, num_images, C, H, W = batch_data.shape
-    # data_reshaped = batch_data.view(B * num_pairs, num_images, C, H, W) # reshape to [B*N, 2, C, H, W]
-    # # where on axis 1, if it is 0 it is the first frame in the pair, if it is 1, it is the second frame in the pair
-    # frame_1 = data_reshaped[:, 0, :, :, :].view(B*num_pairs, C, H, W).to(device) # Extarct frame 1 and reshape to [B*P, C, H, W], which represents total number of frame 1
-    # frame_1 = frame_1.float()
+    configs.device = 'cpu'
+    configs.backbone_choice = 'multi'
+    configs.num_feature_levels = 4
 
 
-
-    train_dataloader, val_dataloader, train_sampler = create_masked_train_val_dataloader(configs) 
-    batch_data, (masked_frameids, masked_frames, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, 8, 3, H, W]
+    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs) 
+    batch_data, (masked_frameids, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, 8, 3, H, W]
     B, num_images, C, H, W = batch_data.shape
-    data_reshaped = batch_data.to(device) # shape will be [B*Number of images, 3, H, W]
+    data_reshaped = batch_data.to(configs.device) # shape will be [B*Number of images, 3, H, W]
     data_reshaped = data_reshaped.float()
 
-
-    chosen_feature_extractor = build_backbone()
-    transformer = Transformer(channels=2048, d_model=512, nhead=8, num_feature_levels=1).to(device)
-    deformable_ball_detection = DeformableBallDetection(backbone=chosen_feature_extractor, transformer=transformer, num_classes=1, 
-                                                        num_queries=1, num_feature_levels=1, aux_loss=False, with_box_refine=False).to(device)
+    deformable_ball_detection = build_detector(configs)
 
 
     out = deformable_ball_detection(data_reshaped)
-    # print(out)
-    # print(labels, masked_frameids)
-    # output_path=draw_image_with_ball(masked_frames[0], labels[0], "/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/src/model", 4)
-    # print(output_path)

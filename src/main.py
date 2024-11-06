@@ -9,10 +9,11 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 
 from tqdm import tqdm
-from model.deformable_detection_model import build_detector
-# from model.propose_model import build_detector
+# from model.deformable_detection_model import build_detector
+from model.propose_model import build_detector
+# from model.tracknet import build_TrackerNet
 from model.model_utils import make_data_parallel, get_num_parameters, post_process
-from losses_metrics.losses import Heatmap_Ball_Detection_Loss, HeatmapBallDetectionLoss, extract_coords_from_heatmap
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss, HeatmapBallDetectionLoss
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched
 from losses_metrics.physics_loss import PhysicsLoss
 from config.config import parse_configs
@@ -94,6 +95,7 @@ def main_worker(gpu_idx, configs):
     
 
     model = build_detector(configs)
+    # model = build_TrackerNet(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -104,6 +106,7 @@ def main_worker(gpu_idx, configs):
     is_best = False
     # loss_func = HeatmapBallDetectionLoss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
     loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1])
+    # loss_func = HeatmapCrossEntropyLoss()
     physics_loss_func = PhysicsLoss(fps=configs.fps)
 
 
@@ -217,18 +220,23 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, physics_loss_func
         batch_size = batch_data.size(0)
         batch_data = batch_data.to(configs.device)
         labels = labels.to(configs.device)
-        labels = labels.float() # labels is in shape [B, N, 2]
-        
+        labels = labels.float() # labels is in shape [B, 2]
+
+        # #for tracknet we need to rehsape the data
+        # B, N, C, H, W = batch_data.shape
+        # # Permute to bring frames and channels together
+        # batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+        # # Reshape to combine frames into the channel dimension
+        # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+            
         output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+
         # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
-        physics_loss = torch.tensor(1e-8, device=configs.device, dtype=torch.float)
-    
+        physics_loss = torch.tensor(0, device=configs.device, dtype=torch.float)
         normalized_physics_loss = physics_loss * 0.01
         heatmap_loss = loss_func(output_heatmap, labels)
-
         # rmse_loss = loss_func(output_coords, labels)
         total_loss = heatmap_loss + physics_loss
-    
 
         # For torch.nn.DataParallel case
         if (not configs.distributed) and (configs.gpu_idx is None):
@@ -283,17 +291,22 @@ def evaluate_one_epoch(val_loader, model, loss_func, physics_loss_func, epoch, c
             batch_data = batch_data.to(configs.device)
             labels = labels.to(configs.device)
             labels = labels.float()
+
+            # #for tracknet we need to rehsape the data
+            # B, N, C, H, W = batch_data.shape
+            # # Permute to bring frames and channels together
+            # batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+            # # Reshape to combine frames into the channel dimension
+            # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
             
-            output_heatmap = model(batch_data.float()) # output in shape ([B, N, W],[B, N, H]) if output heatmap
+            output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
             
             # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
-            physics_loss = torch.tensor(1e-8, device=configs.device, dtype=torch.float)
+            physics_loss = torch.tensor(0, device=configs.device, dtype=torch.float)
             normalized_physics_loss = physics_loss * 00.1
-
             heatmap_loss = loss_func(output_heatmap, labels)
             
             total_loss = heatmap_loss + normalized_physics_loss
-            
             mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
             rmse_tensor = torch.tensor(rmse).to(configs.device)
 

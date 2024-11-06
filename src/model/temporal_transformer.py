@@ -12,7 +12,7 @@ from model.temporal_model import PixelTemporalSelfAttention, TemporalDeformableS
 from utils.misc import inverse_sigmoid
 
 class Transformer(nn.Module):
-    def __init__(self, channels=2048, d_model=512, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, 
+    def __init__(self, channels=2048, d_model=512, nhead=8, num_encoder_layers=4, num_decoder_layers=4, dim_feedforward=2048, 
                  dropout=0.1, activation="relu", num_feature_levels=4, enc_n_points=4, num_frames=9, batch_size=8):
         super(Transformer, self).__init__()
 
@@ -27,7 +27,7 @@ class Transformer(nn.Module):
         self.encoder = Encoder(encoder_layer, num_encoder_layers)
 
         # temporal model
-        self.temporal_model = PixelTemporalSelfAttention(self.d_model, self.nhead, num_encoder_layers)
+        # self.temporal_model = PixelTemporalSelfAttention(self.d_model, self.nhead, num_encoder_layers)
         # self.temporal_model = TemporalDeformableSelfAttentionEncoder(d_model=d_model, d_ffn=dim_feedforward, dropout=dropout,
         #                                                              activation=activation, n_levels=num_encoder_layers)
 
@@ -106,7 +106,8 @@ class Transformer(nn.Module):
         B, N = self.batch_size, self.num_frames
         memory = memory.view(B, N, HW, c)
         # go through temporal model which is deformable temporal model where we utilize other frame information
-        memory = self.temporal_model(memory) # this will output shape [B, HW, C]
+        # memory = self.temporal_model(memory) # this will output shape [B, HW, C]
+        memory = memory[:, -1, :, :] # make it [B, HW, C]
 
         query_embed, tgt = torch.split(query_embed, c, dim=1)
         query_embed = query_embed.unsqueeze(0).expand(B, -1, -1)
