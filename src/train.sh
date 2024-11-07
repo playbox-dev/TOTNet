@@ -6,7 +6,7 @@
 # single node multiple gpu
 python main.py     \
     --num_epochs 30   \
-    --saved_fn 'normal_tracking_135_240_proposed_motion'   \
+    --saved_fn 'normal_tracking_135_240_proposed_motion(2)'   \
     --backbone_choice 'single' \
     --num_feature_levels 1  \
     --interval 1   \

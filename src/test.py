@@ -11,15 +11,18 @@ import torch.multiprocessing as mp
 import torch.utils.data.distributed
 import math
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+from utils.logger import Logger
 
 sys.path.append('./')
 
 from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
 # from model.deformable_detection_model import build_detector
-from model.propose_model import build_detector
+# from model.propose_model import build_detector
 # from model.tracknet import build_TrackerNet
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched
+from model.motion_model import build_motion_model
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords
 from utils.misc import AverageMeter
 from config.config import parse_configs
 
@@ -67,8 +70,9 @@ def main_worker(gpu_idx, configs):
     configs.is_master_node = (not configs.distributed) or (
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
-    model = build_detector(configs)
+    # model = build_detector(configs)
     # model = build_TrackerNet(configs)
+    model = build_motion_model(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -92,6 +96,7 @@ def test(test_loader, model, configs):
     data_time = AverageMeter('Data', ':6.3f')
     rmse_overall = AverageMeter('RMSE_Overall', ':6.4f')
     real_rmse = AverageMeter('Real_RMSE', ':6.4f')
+    percision_overall, recall_overall, f1_overall = AverageMeter('Percision', '6.4f'), AverageMeter('Recall', '6.4f'), AverageMeter('F1', '6.4f')
 
     x_scale = configs.org_size[1]/configs.img_size[1]
     y_scale = configs.org_size[0]/configs.img_size[0]
@@ -122,6 +127,8 @@ def test(test_loader, model, configs):
             output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
         
             mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
+            post_processed_coords = extract_coords(output_heatmap)
+            percision, recall, f1 = precision_recall_f1_tracknet(post_processed_coords, labels)
             pred_x_logits, pred_y_logits = output_heatmap
 
 
@@ -151,9 +158,12 @@ def test(test_loader, model, configs):
                 batch_time.update(time.time() - start_time)
                 start_time = time.time()
             rmse_overall.update(rmse)
+            percision_overall.update(percision)
+            recall_overall.update(recall)
+            f1_overall.update(f1)
 
     print(
-        'rmse_global: {:.2f}, real_rmse {:.2f}'.format(rmse_overall.avg, real_rmse.avg))
+        'rmse_global: {:.2f}, real_rmse {:.2f}, percision {:.2f}, recall {:.2f}, f1 {:.2f}'.format(rmse_overall.avg, real_rmse.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg))
     print('Done testing')
 
 

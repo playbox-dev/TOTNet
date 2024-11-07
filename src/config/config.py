@@ -27,7 +27,7 @@ def parse_configs():
                         help='mini-batch size (default: 8), this is the total'
                             'batch size of all GPUs on the current node when using'
                             'Data Parallel or Distributed Data Parallel')
-    parser.add_argument('--num_workers', type=int, default=4,
+    parser.add_argument('--num_workers', type=int, default=8,
                         help='Number of threads for loading data')
     parser.add_argument('--distributed', action='store_true', 
                        help="If using multiple GPUs for distributed training")

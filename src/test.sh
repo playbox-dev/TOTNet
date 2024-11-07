@@ -5,7 +5,7 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_135_240_proposed_motion' \
+  --saved_fn 'normal_tracking_135_240_proposed_motion(2)' \
   --gpu_idx 0   \
   --num_queries 100    \
   --batch_size 16   \
@@ -13,6 +13,6 @@ python test.py \
   --img_size 135 240    \
   --num_frames 5  \
   --interval 1   \
-  --occluded_prob 0 \
-  --pretrained_path '../checkpoints/normal_tracking_135_240_proposed_motion/normal_tracking_135_240_proposed_motion_best.pth' \
+  --occluded_prob 1.0 \
+  --pretrained_path '../checkpoints/normal_tracking_135_240_proposed_motion(2)/normal_tracking_135_240_proposed_motion(2)_best.pth' \
 

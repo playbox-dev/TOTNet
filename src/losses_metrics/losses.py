@@ -49,6 +49,46 @@ class Heatmap_Ball_Detection_Loss(nn.Module):
 
         # Return the combined loss
         return loss_x + loss_y
+    
+
+class Heatmap_Ball_Detection_Loss_2D(nn.Module):
+    def __init__(self, h, w, sigma=2.0):
+        super(Heatmap_Ball_Detection_Loss_2D, self).__init__()
+        self.h = h  # Image height
+        self.w = w  # Image width
+        self.sigma = sigma
+        self.bce_loss = nn.BCELoss()  # Use BCEWithLogitsLoss if your output is logits
+
+    def forward(self, output, target_ball_position):
+        """
+        Args:
+        - output: [B, H, W] predicted heatmap with probabilities for each pixel
+        - target_ball_position: [B, 2] true (x, y) integer pixel coordinates of the ball
+        """
+        device = output.device
+        batch_size = output.size(0)
+
+        # Ensure sigma is a tensor
+        sigma_tensor = torch.tensor(self.sigma, dtype=torch.float32, device=device)
+
+        # Create coordinate grids
+        y_coords = torch.arange(self.h, device=device).view(1, self.h, 1).expand(batch_size, self.h, self.w)
+        x_coords = torch.arange(self.w, device=device).view(1, 1, self.w).expand(batch_size, self.h, self.w)
+
+        # Extract target positions and reshape for broadcasting
+        x_targets = target_ball_position[:, 0].view(batch_size, 1, 1).float()
+        y_targets = target_ball_position[:, 1].view(batch_size, 1, 1).float()
+
+        # Compute squared distances
+        squared_distances = ((x_coords - x_targets) ** 2 + (y_coords - y_targets) ** 2)
+
+        # Compute Gaussian heatmaps
+        target_heatmap = torch.exp(-squared_distances / (2 * sigma_tensor ** 2))
+
+        # Compute binary cross-entropy loss between the predicted and target heatmaps
+        loss = self.bce_loss(output, target_heatmap)
+
+        return loss
 
 
 class HeatmapBallDetectionLoss(nn.Module):

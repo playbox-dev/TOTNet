@@ -10,11 +10,12 @@ import torch.distributed as dist
 
 from tqdm import tqdm
 # from model.deformable_detection_model import build_detector
-from model.propose_model import build_detector
+# from model.propose_model import build_detector
 # from model.tracknet import build_TrackerNet
+from model.motion_model import build_motion_model
 from model.model_utils import make_data_parallel, get_num_parameters, post_process
-from losses_metrics.losses import Heatmap_Ball_Detection_Loss, HeatmapBallDetectionLoss
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss, HeatmapBallDetectionLoss, Heatmap_Ball_Detection_Loss_2D
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, calculate_rmse_batched, heatmap_calculate_metrics_2d
 from losses_metrics.physics_loss import PhysicsLoss
 from config.config import parse_configs
 from utils.logger import Logger
@@ -94,8 +95,9 @@ def main_worker(gpu_idx, configs):
         tb_writer = None
     
 
-    model = build_detector(configs)
+    # model = build_detector(configs)
     # model = build_TrackerNet(configs)
+    model = build_motion_model(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -105,7 +107,8 @@ def main_worker(gpu_idx, configs):
     earlystop_count = 0
     is_best = False
     # loss_func = HeatmapBallDetectionLoss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
-    loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1])
+    loss_func = Heatmap_Ball_Detection_Loss(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
+    # loss_func = Heatmap_Ball_Detection_Loss_2D(h=configs.img_size[0], w=configs.img_size[1]).to(configs.device)
     # loss_func = HeatmapCrossEntropyLoss()
     physics_loss_func = PhysicsLoss(fps=configs.fps)
 
