@@ -1,0 +1,4 @@
+777 skipped frame due to due to invalid last label
+motion model num params is 10483781
+Forward pass time: 3.8638 seconds
+Features stacked_features Shape: torch.Size([4, 640])

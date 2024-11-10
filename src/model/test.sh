@@ -6,4 +6,6 @@
 
 # python temporal_transformer.py
 # python propose_model.py
-python temporal_model.py
+# python temporal_model.py
+# python motion_model.py
+python tracknet.py

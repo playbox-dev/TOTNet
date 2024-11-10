@@ -221,9 +221,8 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, physics_loss_func
         data_time.update(time.time() - start_time)
 
         batch_size = batch_data.size(0)
-        batch_data = batch_data.to(configs.device)
-        labels = labels.to(configs.device)
-        labels = labels.float() # labels is in shape [B, 2]
+        batch_data = batch_data.to(configs.device, dtype=torch.float)
+        labels = labels.to(configs.device, dtype=torch.float)
 
         # #for tracknet we need to rehsape the data
         # B, N, C, H, W = batch_data.shape
@@ -232,7 +231,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, physics_loss_func
         # # Reshape to combine frames into the channel dimension
         # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
             
-        output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+        output_heatmap = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap
 
         # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
         physics_loss = torch.tensor(0, device=configs.device, dtype=torch.float)
@@ -291,9 +290,8 @@ def evaluate_one_epoch(val_loader, model, loss_func, physics_loss_func, epoch, c
             data_time.update(time.time() - start_time)
             batch_size = batch_data.size(0)
 
-            batch_data = batch_data.to(configs.device)
-            labels = labels.to(configs.device)
-            labels = labels.float()
+            batch_data = batch_data.to(configs.device, dtype=torch.float)
+            labels = labels.to(configs.device, dtype=torch.float)
 
             # #for tracknet we need to rehsape the data
             # B, N, C, H, W = batch_data.shape
@@ -302,7 +300,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, physics_loss_func, epoch, c
             # # Reshape to combine frames into the channel dimension
             # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
             
-            output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+            output_heatmap = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap
             
             # physics_loss = physics_loss_func(output_coords[0], output_coords[1], labels)
             physics_loss = torch.tensor(0, device=configs.device, dtype=torch.float)

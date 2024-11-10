@@ -157,7 +157,7 @@ def precision_recall_f1(pred_heatmap, target_coords, threshold=0.5):
     return precision, recall, f1_score
 
 
-def precision_recall_f1_tracknet(pred_coords, target_coords, distance_threshold=2):
+def precision_recall_f1_tracknet(pred_coords, target_coords, distance_threshold=5):
     """
     Calculates precision, recall, and F1 score for TrackNet-style tracking,
     where a detection is counted as true positive if within a certain distance

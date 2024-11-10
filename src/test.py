@@ -20,7 +20,7 @@ from data_process.dataloader import create_occlusion_test_dataloader, create_occ
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
 # from model.deformable_detection_model import build_detector
 # from model.propose_model import build_detector
-# from model.tracknet import build_TrackerNet
+from model.tracknet import build_TrackerNet
 from model.motion_model import build_motion_model
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords
 from utils.misc import AverageMeter

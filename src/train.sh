@@ -6,17 +6,17 @@
 # single node multiple gpu
 python main.py     \
     --num_epochs 30   \
-    --saved_fn 'normal_tracking_135_240_proposed_motion(2)'   \
+    --saved_fn 'normal_tracking_360_640_proposed_motion'   \
     --backbone_choice 'single' \
     --num_feature_levels 1  \
     --interval 1   \
     --num_frames 5  \
     --lr 1e-4 \
-    --img_size 135 240 \
+    --img_size 360 640 \
     --num_queries 100    \
-    --batch_size 32 \
+    --batch_size 8 \
     --transfromer_dmodel 512    \
-    --print_freq 50 \
+    --print_freq 100 \
     --dist_url 'tcp://127.0.0.1:29500' \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \

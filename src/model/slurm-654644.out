@@ -1,0 +1,10 @@
+777 skipped frame due to due to invalid last label
+motion model num params is 10711488
+Forward pass time: 3.2891 seconds
+tensor([0.0011, 0.0011, 0.0011,  ..., 0.0029, 0.0029, 0.0029], device='cuda:0',
+       grad_fn=<Unique2Backward0>) tensor([0.0018, 0.0019, 0.0019,  ..., 0.0048, 0.0048, 0.0049], device='cuda:0',
+       grad_fn=<Unique2Backward0>)
+out shape (torch.Size([8, 640]), torch.Size([8, 360]))
+loss is 0.03006904199719429
+rmse is 91.11320495605469
+tensor(311., device='cuda:0') tensor(165., device='cuda:0') tensor([226, 172])

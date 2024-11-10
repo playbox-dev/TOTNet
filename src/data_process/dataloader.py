@@ -340,7 +340,8 @@ if __name__ == '__main__':
     configs.batch_size = 1
     configs.img_size = (360, 640)
     configs.interval = 1
-    configs.num_frames = 3
+    configs.num_frames = 5
+    configs.occluded_prob = 0
 
     # Adjust ball position
     w_ratio = 1920 / configs.img_size[1] # New width divided by original width

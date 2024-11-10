@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+import time
 import sys
 sys.path.append('../')
 
@@ -214,10 +215,11 @@ if __name__ == '__main__':
     from data_process.dataloader import create_occlusion_train_val_dataloader
     from losses_metrics.losses import Heatmap_Ball_Detection_Loss
     from losses_metrics.metrics import heatmap_calculate_metrics
+    from model.model_utils import get_num_parameters
     configs = parse_configs()
-    configs.device = 'cpu'
+    configs.device = 'cuda'
     configs.num_frames = 5
-    configs.img_size = (135, 240)
+    configs.img_size = (360, 640)
 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs) 
     batch_data, (masked_frameids, labels) = next(iter(train_dataloader)) # batch data will be in shape [B, N, C, H, W]
@@ -228,9 +230,14 @@ if __name__ == '__main__':
 
     # Reshape to combine frames into the channel dimension
     stacked_data = stacked_data.view(B, N * C, H, W).float()  # Shape: [B, N*C, H, W]
+    stacked_data = stacked_data.to(configs.device)
 
-    model = build_TrackerNet(configs).eval()
+    model = build_TrackerNet(configs)
+    print(f"motion model num params is {get_num_parameters(model)}")
+    start_time = time.time()
     out = model(stacked_data)
+    forward_pass_time = time.time() - start_time
+    print(f"Forward pass time: {forward_pass_time:.4f} seconds")
     loss = Heatmap_Ball_Detection_Loss(h=H, w = W)
     mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(out, labels)
     print(torch.unique(out[0]), torch.unique(out[1]))
