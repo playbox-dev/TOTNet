@@ -5,6 +5,23 @@ import math
 import torch
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau, LambdaLR
 import torch.distributed as dist
+import subprocess
+
+def print_nvidia_driver_version():
+    try:
+        # Run nvidia-smi command and capture the output
+        nvidia_smi_output = subprocess.check_output(['nvidia-smi']).decode('utf-8')
+        # Extract the driver version from the output
+        for line in nvidia_smi_output.split('\n'):
+            if 'Driver Version' in line:
+                print("NVIDIA Driver Version:")
+                print(line.strip())
+                return
+        print("NVIDIA driver version not found in nvidia-smi output.")
+    except FileNotFoundError:
+        print("nvidia-smi is not installed or NVIDIA drivers are not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 def create_optimizer(configs, model):

@@ -2,17 +2,11 @@ import time
 import sys
 import os
 import warnings
-
-import numpy as np
-import matplotlib.pyplot as plt
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.utils.data.distributed
-import math
 from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
-from utils.logger import Logger
 
 sys.path.append('./')
 
@@ -20,10 +14,12 @@ from data_process.dataloader import create_occlusion_test_dataloader, create_occ
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
 # from model.deformable_detection_model import build_detector
 # from model.propose_model import build_detector
-from model.tracknet import build_TrackerNet
+from model.tracknet import build_TrackerNet, build_TrackNetV2
+from model.wasb import build_wasb
 from model.motion_model import build_motion_model
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords
 from utils.misc import AverageMeter
+from utils.visualization import visualize_and_save_2d_heatmap
 from config.config import parse_configs
 
 
@@ -72,7 +68,9 @@ def main_worker(gpu_idx, configs):
 
     # model = build_detector(configs)
     # model = build_TrackerNet(configs)
-    model = build_motion_model(configs)
+    # model = build_TrackNetV2(configs)
+    # model = build_motion_model(configs)
+    model = build_wasb(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -84,10 +82,11 @@ def main_worker(gpu_idx, configs):
         model = load_pretrained_model(model, configs.pretrained_path, gpu_idx)
     # Load dataset
     # test_loader = create_normal_test_dataloader(configs)
-    train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
-    test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
-
+    # train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
     # test(val_loader, model, configs)
+
+    test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
+    print(f"number of batches in test is {len(test_loader)}")
     test(test_loader, model, configs)
 
 
@@ -96,7 +95,10 @@ def test(test_loader, model, configs):
     data_time = AverageMeter('Data', ':6.3f')
     rmse_overall = AverageMeter('RMSE_Overall', ':6.4f')
     real_rmse = AverageMeter('Real_RMSE', ':6.4f')
-    percision_overall, recall_overall, f1_overall = AverageMeter('Percision', '6.4f'), AverageMeter('Recall', '6.4f'), AverageMeter('F1', '6.4f')
+    accuracy_overall = AverageMeter('Accuracy', '6.4f')
+    percision_overall = AverageMeter('Percision', '6.4f')
+    recall_overall = AverageMeter('Recall', '6.4f')
+    f1_overall = AverageMeter('F1', '6.4f')
 
     x_scale = configs.org_size[1]/configs.img_size[1]
     y_scale = configs.org_size[0]/configs.img_size[0]
@@ -105,7 +107,7 @@ def test(test_loader, model, configs):
     model.eval()
     with torch.no_grad():
         start_time = time.time()
-        for batch_idx, (batch_data, (masked_frameids, labels)) in enumerate(tqdm(test_loader)):
+        for batch_idx, (batch_data, (_, labels, _, _)) in enumerate(tqdm(test_loader)):
 
             print(f'\n===================== batch_idx: {batch_idx} ================================')
 
@@ -117,18 +119,20 @@ def test(test_loader, model, configs):
             labels = labels.float()
             # compute output
 
-            # #for tracknet we need to rehsape the data
-            # B, N, C, H, W = batch_data.shape
-            # # Permute to bring frames and channels together
-            # batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
-            # # Reshape to combine frames into the channel dimension
-            # batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+            #for tracknet we need to rehsape the data
+            B, N, C, H, W = batch_data.shape
+            # Permute to bring frames and channels together
+            batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+            # Reshape to combine frames into the channel dimension
+            batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
 
-            output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+            with torch.autocast(device_type='cuda'):
+                output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+      
         
             mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
             post_processed_coords = extract_coords(output_heatmap)
-            percision, recall, f1 = precision_recall_f1_tracknet(post_processed_coords, labels)
+            percision, recall, f1, accuracy = precision_recall_f1_tracknet(post_processed_coords, labels, distance_threshold=configs.ball_size)
             pred_x_logits, pred_y_logits = output_heatmap
 
 
@@ -161,9 +165,10 @@ def test(test_loader, model, configs):
             percision_overall.update(percision)
             recall_overall.update(recall)
             f1_overall.update(f1)
+            accuracy_overall.update(accuracy)
 
     print(
-        'rmse_global: {:.2f}, real_rmse {:.2f}, percision {:.2f}, recall {:.2f}, f1 {:.2f}'.format(rmse_overall.avg, real_rmse.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg))
+        'rmse_global: {:.4f}, real_rmse {:.4f}, Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}'.format(rmse_overall.avg, real_rmse.avg, accuracy_overall.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg))
     print('Done testing')
 
 

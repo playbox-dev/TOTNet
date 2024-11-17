@@ -5,14 +5,30 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_135_240_proposed_motion(3)' \
+  --saved_fn 'normal_tracking_360_640_wasb_tennis' \
   --gpu_idx 0   \
-  --num_queries 100    \
-  --batch_size 16   \
-  --transfromer_dmodel 512    \
-  --img_size 135 240    \
-  --num_frames 5  \
+  --batch_size 8   \
+  --img_size 360 640    \
+  --num_frames 3  \
   --interval 1   \
   --occluded_prob 0 \
-  --pretrained_path '../checkpoints/normal_tracking_135_240_proposed_motion(3)/normal_tracking_135_240_proposed_motion(3)_best.pth' \
+  --dataset_choice 'tennis' \
+  --ball_size 4 \
+  --pretrained_path '../checkpoints/normal_tracking_360_640_wasb_tennis/normal_tracking_360_640_wasb_tennis_best.pth' \
 
+
+# deformable 
+# python test.py \
+#   --working-dir '../' \
+#   --saved_fn 'normal_tracking_360_640_wasb_tennis' \
+#   --gpu_idx 0   \
+#   --num_queries 100    \
+#   --batch_size 8   \
+#   --transfromer_dmodel 512    \
+#   --img_size 360 640    \
+#   --num_frames 3  \
+#   --interval 1   \
+#   --occluded_prob 0 \
+#   --dataset_choice 'tennis' \
+#   --ball_size 4 \
+#   --pretrained_path '../checkpoints/normal_tracking_360_640_wasb_tennis/normal_tracking_360_640_wasb_tennis_best.pth' \

@@ -10,7 +10,7 @@ class Heatmap_Ball_Detection_Loss(nn.Module):
         super(Heatmap_Ball_Detection_Loss, self).__init__()
         self.h = h  # Image height
         self.w = w  # Image width
-        self.bce_loss = nn.BCELoss()  # Use BCEWithLogitsLoss for logits
+        self.loss = nn.BCELoss() # Use BCEWithLogitsLoss for logits
 
     def forward(self, output, target_ball_position):
         """
@@ -28,9 +28,6 @@ class Heatmap_Ball_Detection_Loss(nn.Module):
         target_x = target_ball_position[:, 0].long().to(device)  # [B]
         target_y = target_ball_position[:, 1].long().to(device)  # [B]
 
-        # Create one-hot encoded ground truth for x and y
-        batch_size = pred_x.size(0)
-
         # Clamp the indices to valid ranges
         target_x = torch.clamp(target_x, 0, pred_x.shape[1] - 1)
         target_y = torch.clamp(target_y, 0, pred_y.shape[1] - 1)
@@ -44,8 +41,8 @@ class Heatmap_Ball_Detection_Loss(nn.Module):
         target_y_one_hot.scatter_(1, target_y.unsqueeze(1), 1.0)
 
         # Compute binary cross-entropy loss for x and y
-        loss_x = self.bce_loss(pred_x, target_x_one_hot)
-        loss_y = self.bce_loss(pred_y, target_y_one_hot)
+        loss_x = self.loss(pred_x, target_x_one_hot)
+        loss_y = self.loss(pred_y, target_y_one_hot)
 
         # Return the combined loss
         return loss_x + loss_y

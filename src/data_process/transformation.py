@@ -21,12 +21,12 @@ class Compose(object):
 class Normalize():
     def __init__(self, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), num_frames_sequence=9, p=1.0):
         self.p = p
-        self.mean = np.repeat(np.array(mean).reshape(1, 1, 3), repeats=num_frames_sequence, axis=-1)
-        self.std = np.repeat(np.array(std).reshape(1, 1, 3), repeats=num_frames_sequence, axis=-1)
+        self.mean = np.array(mean).reshape(1, 1, 3)  # For individual image normalization
+        self.std = np.array(std).reshape(1, 1, 3)
 
     def __call__(self, imgs, ball_position_xy):
         if random.random() < self.p:
-            imgs = ((imgs / 255.) - self.mean) / self.std
+            imgs = [((img / 255.) - self.mean) / self.std for img in imgs]
 
         return imgs, ball_position_xy
 
@@ -77,8 +77,8 @@ class Resize(object):
             transformed_imgs.append(transformed_img)
 
         # Adjust ball position
-        w_ratio = original_w / new_w  # New width divided by original width
-        h_ratio = original_h / new_h # New height divided by original height
+        w_ratio = float(original_w) / float(new_w)  # New width divided by original width
+        h_ratio = float(original_h) / float(new_h) # New height divided by original height
 
         transformed_ball_pos = np.array([ball_position_xy[0] / w_ratio, ball_position_xy[1] / h_ratio])
         # Round the coordinates to the nearest integer

@@ -4,9 +4,12 @@ import sys
 import cv2 
 import torch.nn.functional as F
 import time
+import torchvision.models as models
+import torchvision.ops.deform_conv
+from einops import rearrange
 
 sys.path.append('../')
-from model.backbone_positional_encoding import ChosenFeatureExtractor
+from model.backbone_positional_encoding import create_positional_encoding
 
 class MotionModel(nn.Module):
     def __init__(self):
@@ -40,8 +43,8 @@ class ConvBlock(nn.Module):
         super().__init__()
         self.block = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=pad, bias=bias),
-            nn.BatchNorm2d(out_channels),
             nn.ReLU(),
+            nn.BatchNorm2d(out_channels),
         )
 
     def forward(self, x):
@@ -51,101 +54,218 @@ class TemporalConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding, bias=True):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding, bias=bias),
-            nn.BatchNorm3d(num_features=in_channels),
-            nn.ReLU()
+            nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=(kernel_size, 1, 1), padding=(padding, 0, 0), bias=bias),
+            nn.ReLU(),
+            nn.BatchNorm3d(out_channels),
         )
     def forward(self, x):
         return self.block(x)
     
 
+class EfficientAttentionMask(nn.Module):
+    def __init__(self, input_channels, threshold=0.5):
+        super(EfficientAttentionMask, self).__init__()
+        
+        # Pooling layer to downsample the input first
+        self.pool = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),  # Downscale by factor of 2
+            nn.MaxPool2d(kernel_size=2, stride=2)   # Downscale again by factor of 2, total factor of 4
+        )
+        
+        # Conv2d to project downsampled spatial data to 1D
+        self.input_proj = nn.Sequential(
+                nn.Conv2d(input_channels, 32, kernel_size=1),
+                nn.GroupNorm(32, 32),
+            )
+        
+        # Self-attention layer
+        self.attention = nn.MultiheadAttention(embed_dim=32, num_heads=4, batch_first=True)
+        
+        # Fully connected layer to produce the mask
+        self.fc = nn.Linear(32, 1)
+        
+        # Threshold for masking
+        self.threshold = threshold
+
+    def forward(self, x):
+        B, N, C, H, W = x.shape
+        x_rehsaped = x.view(B*N,C,H,W)
+        
+        # Downsample the input with pooling
+        x_pooled = self.pool(x_rehsaped)  # [B, N, C, H//2, W//2]
+        BN, C_pooled, H_pooled, W_pooled = x_pooled.shape
+        
+        # Project to 1D
+        x_projected = self.input_proj(x_pooled)  # [B*N, C_proj, H_pooled, W_pooled]
+        # Add positional encoding
+        x_projected = x_projected + create_positional_encoding(x_projected)
+        x_projected = x_projected.flatten(2)
+
+        # Reshape to [B*N, H*W, C_proj] for attention
+        x_projected = x_projected.permute(0, 2, 1)
+        
+        # Self-attention
+        attn_output, _ = self.attention(x_projected, x_projected, x_projected)  # [B*N, H*W, C_proj]
+        
+        # Fully connected layer to get attention scores
+        attention_scores = self.fc(attn_output).squeeze(-1)  # [B*N, H*W]
+        
+        # Reshape back to original spatial dimensions
+        attention_map = attention_scores.view(B, N, H_pooled, W_pooled)
+        
+        # Upsample attention map to match original dimensions
+        attention_map_upsampled = F.interpolate(attention_map, size=(H, W), mode="nearest")
+        
+        # Apply threshold to create binary mask
+        mask = (attention_map_upsampled > self.threshold).float()
+
+        # Apply mask to original input
+        masked_output = x * mask.unsqueeze(2)  # Mask over the original resolution
+        return masked_output
+
+
+class SaliencyMask(nn.Module):
+    def __init__(self, threshold=0.5):
+        super(SaliencyMask, self).__init__()
+        self.saliency_model = models.segmentation.deeplabv3_resnet50(weights=models.segmentation.DeepLabV3_ResNet50_Weights.DEFAULT)
+        self.saliency_model.eval()
+        for param in self.saliency_model.parameters():
+            param.requires_grad = False
+        self.threshold = threshold
+
+    def forward(self, x):
+        B, N, C, H, W = x.shape
+        x_flat = x.view(B * N, C, H, W)
+
+        # Generate saliency maps
+        with torch.no_grad():
+            saliency_output = self.saliency_model(x_flat)['out']  # Saliency map
+
+        saliency_map = torch.sigmoid(saliency_output).max(dim=1, keepdim=True)[0]  # [0, 1] scale
+        saliency_map = saliency_map.view(B, N, 1, H, W)
+        mask = (saliency_map > self.threshold).float()
+
+        # Apply the mask
+        masked_output = x * mask
+
+        return masked_output
+
+
+
+class EncoderBlock(nn.Module):
+    def __init__(self, num_frames, in_channels, out_channels, kernel_size, padding, bias=True):
+        super().__init__()
+        self.num_frames = num_frames
+        self.out_channels = out_channels
+        self.conv1 = ConvBlock(in_channels, out_channels)
+        self.conv2 = ConvBlock(out_channels, out_channels)
+        self.temp_conv = TemporalConvBlock(out_channels, out_channels, kernel_size, padding, bias)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        # input in shape [BN, C, H, W]
+        BN, C, H, W = x.shape
+        B = BN//self.num_frames
+        x = self.conv1(x)
+        x = self.conv2(x)
+        spatial_out = x.clone()
+        x = x.view(B, self.num_frames, self.out_channels, H, W).permute(0, 2, 1, 3, 4)  # [B, C', N, H, W]
+        x_res = x  # Residual connection
+        # Temporal Convolution using Conv3d
+        x_temporal = self.temp_conv(x)
+        temporal_out = x_temporal.clone()
+        x = x_temporal + x_res  # Add residual
+
+        # reshape to [B*N, C, H, W]
+        x = x.permute(0, 2, 1, 3, 4).reshape(BN, self.out_channels, H, W)
+        x = self.pool(x)
+
+        return x, spatial_out, temporal_out
+
+class DecoderBlock(nn.Module):
+    def __init__(self, num_frames, in_channels, out_channels, kernel_size, padding, bias=True):
+        super().__init__()
+        self.num_frames = num_frames
+        self.out_channels = out_channels
+        self.conv1 = ConvBlock(in_channels, out_channels)
+        self.conv2 = ConvBlock(out_channels, out_channels)
+        self.temp_conv = TemporalConvBlock(out_channels*2, out_channels, kernel_size, padding, bias)
+
+    def forward(self, x, target_H, target_W, spatial_concat, temporal_concat):
+        # input in shape [BN, C, H, W]
+        BN, _, _, _ = x.shape
+        B = BN//self.num_frames
+        x = F.interpolate(x, size=(target_H, target_W), mode='nearest')
+        x = torch.concat((x, spatial_concat), dim=1)
+        x = self.conv1(x)
+        x = self.conv2(x)
+
+        x = x.view(B, self.num_frames, x.size(1), target_H, target_W).permute(0, 2, 1, 3, 4)  # [B, C', N, H, W]
+        x_res = x  # Residual connection
+        # Temporal Convolution using Conv3d
+        x = torch.concat((x, temporal_concat), dim=1)
+        x = self.temp_conv(x)
+
+        x = x.permute(0, 2, 1, 3, 4).reshape(BN, self.out_channels, target_H, target_W)
+
+        return x
+        
+
+
+
 class TemporalConvNet(nn.Module):
     def __init__(self, input_channels, spatial_channels=64, num_frames=5):
         super(TemporalConvNet, self).__init__()
-        
+
         self.spatial_channels = spatial_channels
         self.convblock1_out_channels = spatial_channels * 2
         self.convblock2_out_channels = spatial_channels * 4
         self.convblock3_out_channels = spatial_channels * 8
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.pool = nn.MaxPool3d()
+        self.softmax = nn.Softmax(dim=-1)
 
         # Weighted pooling parameters across frames
         self.temporal_weights = nn.Parameter(torch.ones(num_frames), requires_grad=True)
         
+
+        # block 1
         # Spatial convolutions
-        self.conv1 = ConvBlock(in_channels=input_channels, out_channels=spatial_channels)
-        self.conv2 = ConvBlock(in_channels=spatial_channels, out_channels=spatial_channels)
-        
-        # Temporal convolution for block 1
-        # self.temporal_conv1 = nn.Conv1d(spatial_channels, spatial_channels, kernel_size=3, padding=1)
-        # self.temporal_conv1 = nn.Conv1d(spatial_channels, spatial_channels, kernel_size=3, padding=1, groups=spatial_channels)
-        # self.temporal_bn1 = nn.BatchNorm1d(spatial_channels)
-        self.temporal_conv1 = TemporalConvBlock(in_channels=spatial_channels, out_channels=spatial_channels, kernel_size=(3, 1, 1), padding=(1, 0, 0))
-        
+        self.block1 = EncoderBlock(num_frames=num_frames, in_channels=3, out_channels=spatial_channels, kernel_size=3, padding=1)
 
         # block 2 
-        self.conv3 = ConvBlock(in_channels=spatial_channels, out_channels=self.convblock1_out_channels)
-        self.conv4 = ConvBlock(in_channels=self.convblock1_out_channels, out_channels=self.convblock1_out_channels)
-        
-        # Temporal convolution for block 2
-        self.temporal_conv2 = nn.Conv1d(self.convblock1_out_channels, self.convblock1_out_channels, kernel_size=5, padding=5//2)
-        # self.temporal_conv2 = nn.Conv1d(self.convblock1_out_channels, self.convblock1_out_channels, kernel_size=3, padding=2, dilation=2, groups=self.convblock1_out_channels)
-        self.temporal_bn2 = nn.BatchNorm1d(self.convblock1_out_channels)
+        self.block2 = EncoderBlock(num_frames=num_frames, in_channels=spatial_channels, out_channels=self.convblock1_out_channels, kernel_size=5, padding=5//2)
 
         #block 3
-        self.conv5 = ConvBlock(in_channels=self.convblock1_out_channels, out_channels=self.convblock2_out_channels)
-        # self.conv6 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock2_out_channels)
-        self.conv7 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock2_out_channels)
-        
-        # Temporal convolution for block 3
-        self.temporal_conv3 = nn.Conv1d(self.convblock2_out_channels, self.convblock2_out_channels, kernel_size=7, padding=7//2)
-        # self.temporal_conv3 = nn.Conv1d(self.convblock2_out_channels, self.convblock2_out_channels, kernel_size=3, padding=3, dilation=3, groups=self.convblock2_out_channels)
-        self.temporal_bn3 = nn.BatchNorm1d(self.convblock2_out_channels)
+        self.block3 = EncoderBlock(num_frames, in_channels=self.convblock1_out_channels, out_channels=self.convblock2_out_channels, kernel_size=7, padding=7//2)
 
         #block 4
         self.conv8 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock3_out_channels)
         # self.conv9 = ConvBlock(in_channels=self.convblock3_out_channels, out_channels=self.convblock3_out_channels)
         self.conv10 = ConvBlock(in_channels=self.convblock3_out_channels, out_channels=self.convblock3_out_channels)
 
-        self.temporal_conv4 = nn.Conv1d(self.convblock3_out_channels, self.convblock3_out_channels, kernel_size=9, padding=9//2)
-        # self.temporal_conv4 = nn.Conv1d(self.convblock3_out_channels, self.convblock3_out_channels, kernel_size=3, padding=4, dilation=4, groups=self.convblock3_out_channels)
-        self.temporal_bn4 = nn.BatchNorm1d(self.convblock3_out_channels)
+        self.temporal_conv4 = TemporalConvBlock(in_channels=self.convblock3_out_channels, out_channels=self.convblock3_out_channels, kernel_size=9, padding=9//2)
 
         #block 5
-        self.conv11 = ConvBlock(in_channels=self.convblock3_out_channels, out_channels=self.convblock2_out_channels)
-        # self.conv12 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock2_out_channels)
-        self.conv13 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock2_out_channels)
-        self.temporal_conv5 = nn.Conv1d(self.convblock2_out_channels, self.convblock2_out_channels, kernel_size=7, padding=7//2)
-        # self.temporal_conv5 = nn.Conv1d(self.convblock2_out_channels, self.convblock2_out_channels, kernel_size=3, padding=3, dilation=3, groups=self.convblock2_out_channels)
-        self.temporal_bn5 = nn.BatchNorm1d(self.convblock2_out_channels)
+        self.block5 = DecoderBlock(num_frames, self.convblock3_out_channels+self.convblock2_out_channels, self.convblock2_out_channels, 7, padding=7//2)
 
         #block 6
-        self.conv14 = ConvBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock1_out_channels)
-        # self.conv15 = ConvBlock(in_channels=self.convblock1_out_channels, out_channels=self.convblock1_out_channels)
-        self.conv16 = ConvBlock(in_channels=self.convblock1_out_channels, out_channels=self.convblock1_out_channels)
-        self.temporal_conv6 = nn.Conv1d(self.convblock1_out_channels, self.convblock1_out_channels, kernel_size=5, padding=5//2)
-        # self.temporal_conv6 = nn.Conv1d(self.convblock1_out_channels, self.convblock1_out_channels, kernel_size=3, padding=2, dilation=2, groups=self.convblock1_out_channels)
-        self.temporal_bn6 = nn.BatchNorm1d(self.convblock1_out_channels)
+        self.block6 = DecoderBlock(num_frames, self.convblock2_out_channels+self.convblock1_out_channels, self.convblock1_out_channels, 5, 5//2 )
 
         #block 7
-        self.conv17 = ConvBlock(in_channels=self.convblock1_out_channels, out_channels=self.spatial_channels)
-        # self.conv18 = ConvBlock(in_channels=self.spatial_channels, out_channels=self.spatial_channels)
-        self.conv19 = ConvBlock(in_channels=self.spatial_channels, out_channels=self.spatial_channels)
-        self.temporal_conv7 = nn.Conv1d(self.spatial_channels, self.spatial_channels, kernel_size=3, padding=3//2)
-        # self.temporal_conv7 = nn.Conv1d(self.spatial_channels, self.spatial_channels, kernel_size=3, padding=3//2, groups=spatial_channels)
-        self.temporal_bn7 = nn.BatchNorm1d(self.spatial_channels)
-
-
+        self.block7 = DecoderBlock(num_frames, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 3, padding=1)
+        
+        #projection
+        self.final = nn.Conv3d(in_channels=spatial_channels, out_channels=1, kernel_size=(num_frames, 1, 1), stride=(1, 1, 1), padding=(num_frames//2, 0, 0))
+        self.temp_pool = nn.AdaptiveAvgPool3d((1, None, None))  # Temporal size becomes 1
         self._init_weights()
 
     def _init_weights(self):
         for module in self.modules():
-            if isinstance(module, (nn.Conv2d, nn.Conv1d)):
+            if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.Conv1d)):
                 nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
-            elif isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d)):
+            elif isinstance(module, (nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0) 
 
@@ -178,140 +298,64 @@ class TemporalConvNet(nn.Module):
             tuple: heatmap in both x and y directions 
         """
         B, N, C, H, W = x.shape
-
+        
         # Reshape to [B*N, C, H, W] for spatial convolutions
         x = x.view(B * N, C, H, W)  # Merge batch and frame dimensions
 
         # Block 1
-        x = self.conv1(x)
-        x = spatial_out1 = self.conv2(x) # shape [B*N, C, H, W]
-
-        x = x.reshape(B, N, self.spatial_channels, H, W).permute(0, 3, 4, 2, 1) # Reshape for temporal conv
-        x_res = x.reshape(B*H*W, self.spatial_channels, N)  # Reshape for Conv1d
-        x_temporal = temporal_out1 = self.temporal_bn1(F.relu(self.temporal_conv1(x_res)))
-        # x_temporal = temporal_out1 = self.patch_processing(x_res, self.temporal_conv1, self.temporal_bn1, factor=4)
-        x = x_temporal + x_res
-
-        x = x.view(B, H, W, self.spatial_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.spatial_channels, H, W)  # Reshape back to spatial
-        x = self.pool(x)
+        x, spatial_out1, temporal_out1 = self.block1(x)
 
         # Block 2
-        H2,W2 = H//2, W//2
-        x = self.conv3(x)
-        x = spatial_out2 = self.conv4(x)
-        x = x.view(B, N, self.convblock1_out_channels, H2, W2).permute(0, 3, 4, 2, 1)
-
-        x_res = x.reshape(B*H2*W2, self.convblock1_out_channels, N)
-        x_temporal = temporal_out2 = self.temporal_bn2(F.relu(self.temporal_conv2(x_res)))
-        # x_temporal = temporal_out2 = self.patch_processing(x_res, self.temporal_conv2, self.temporal_bn2, factor=4)
-        x = x_temporal + x_res
-
-        x = x.view(B, H2, W2, self.convblock1_out_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.convblock1_out_channels, H2, W2)
-        x = self.pool(x)
+        H2, W2 = H//2, W//2
+        x, spatial_out2, temporal_out2 = self.block2(x)
 
         # Block 3
         H3,W3 = H2//2, W2//2
-        x = self.conv5(x)
-        # x = self.conv6(x)
-        x = spatial_out3 = self.conv7(x)
-        x = x.view(B, N, self.convblock2_out_channels, H3, W3).permute(0, 3, 4, 2, 1)
-
-        x_res = x.reshape(B*H3*W3, self.convblock2_out_channels, N)
-        x_temporal = temporal_out3 = self.temporal_bn3(F.relu(self.temporal_conv3(x_res)))
-        # x_temporal = temporal_out3 = self.patch_processing(x_res, self.temporal_conv3, self.temporal_bn3, factor=4)
-        x = x_temporal + x_res
-
-        x = x.view(B, H3, W3, self.convblock2_out_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.convblock2_out_channels, H3, W3)
-        x = self.pool(x)
+        x, spatial_out3, temporal_out3 = self.block3(x)
 
         # Block 4 which is the bottleneck block
         H4,W4 = H3//2, W3//2
         x = self.conv8(x)
         # x = self.conv9(x)
         x = self.conv10(x)
-        x = x.view(B, N, self.convblock3_out_channels, H4, W4).permute(0, 3, 4, 2, 1)
 
-        x_res = x.reshape(B*H4*W4, self.convblock3_out_channels, N)
-        x_temporal = self.temporal_bn4(F.relu(self.temporal_conv4(x_res)))
-        # x_temporal = self.patch_processing(x_res, self.temporal_conv4, self.temporal_bn4, factor=4)
-        x = x_temporal + x_res
+        x = x.view(B, N, self.convblock3_out_channels, H4, W4).permute(0, 2, 1, 3, 4)  # [B, C', N, H, W]
+        x_res = x  # Residual connection
+        # Temporal Convolution using Conv3d
+        x_temporal = self.temporal_conv4(x)
+        x = x_temporal + x_res  # Add residual
 
-        x = x.view(B, H4, W4, self.convblock3_out_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.convblock3_out_channels, H4, W4)
+        x = x.permute(0, 2, 1, 3, 4).reshape(B * N, self.convblock3_out_channels, H4, W4)
 
         # block 5
-        x = F.interpolate(x, size=(H3, W3), mode='nearest')
-        x = self.conv11(x)
-        # x = self.conv12(x)
-        x = self.conv13(x)
-        x = x + spatial_out3
-
-        x = x.view(B, N, self.convblock2_out_channels, H3, W3).permute(0, 3, 4, 2, 1)
-        x_res = x.reshape(B*H3*W3, self.convblock2_out_channels, N)
-        x_temporal = self.temporal_bn5(F.relu(self.temporal_conv5(x_res)))
-        # x_temporal = self.patch_processing(x_res, self.temporal_conv5, self.temporal_bn5, factor=4)
-        x_temporal = x_temporal + temporal_out3
-        x = x_temporal + x_res
-
-        x = x.view(B, H3, W3, self.convblock2_out_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.convblock2_out_channels, H3, W3)
+        x = self.block5(x, H3, W3, spatial_out3, temporal_out3)
         
         # block 6
-        x = F.interpolate(x, size=(H2, W2), mode='nearest')
-        x = self.conv14(x)
-        # x = self.conv15(x)
-        x = self.conv16(x)
-        x = x + spatial_out2
-
-        x = x.view(B, N, self.convblock1_out_channels, H2, W2).permute(0, 3, 4, 2, 1)
-        x_res = x.reshape(B*H2*W2, self.convblock1_out_channels, N)
-        x_temporal = self.temporal_bn6(F.relu(self.temporal_conv6(x_res)))
-        # x_temporal = self.patch_processing(x_res, self.temporal_conv6, self.temporal_bn6, factor=4)
-        x_temporal = x_temporal + temporal_out2
-        x = x_temporal + x_res
-
-        x = x.view(B, H2, W2, self.convblock1_out_channels, N)
-        x = x.permute(0, 4, 3, 1, 2).reshape(B * N, self.convblock1_out_channels, H2, W2)
+        x = self.block6(x, H2, W2, spatial_out2, temporal_out2)
 
         # block 7
-        x = F.interpolate(x, size=(H, W), mode='nearest')
-        x = self.conv17(x)
-        # x = self.conv18(x)
-        x = self.conv19(x)
-        x = x + spatial_out1
-        
-        x = x.view(B, N, self.spatial_channels, H, W).permute(0, 3, 4, 2, 1)
-        x_res = x.reshape(B*H*W, self.spatial_channels, N)
-        x_temporal = self.temporal_bn7(F.relu(self.temporal_conv7(x_res)))
-        # x_temporal = self.patch_processing(x_res, self.temporal_conv7, self.temporal_bn7, factor=4)
-        x_temporal = x_temporal + temporal_out1
-        x = x_temporal + x_res
-        
-        x = x.view(B, H, W, self.spatial_channels, N)
-        x = x.permute(0, 4, 3, 1, 2)
+        x = self.block7(x, H, W, spatial_out1, temporal_out1) #outputs [B*N, C, H, W]
 
-        x = x.reshape(B, N, self.spatial_channels, H, W)  # Reshape for pooling on N
-        temporal_weights = torch.softmax(self.temporal_weights, dim=0).view(1, N, 1, 1, 1)
-        x = (x * temporal_weights).sum(dim=1)  # Weighted sum across frames
+        # final project 
+        x = rearrange(x, "(b n) c h w -> b c n h w", b=B, n=N)
+        x = self.final(x) # outputs [B, 1, N, H, W]
+        x = self.temp_pool(x)  # Temporal size becomes 1 so [B, 1, 1, H, W]
+        out = x.squeeze(dim=1).squeeze(dim=1) #[B,H,W]
 
-        out = x
+        vertical_heatmap = out.max(dim=-1)[0]  # Max over width
+        horizontal_heatmap = out.max(dim=-2)[0]  # Max over height
+        vertical_heatmap = self.softmax(vertical_heatmap)
+        horizontal_heatmap = self.softmax(horizontal_heatmap) 
 
-        # Sum along the width to get a vertical heatmap (along H dimension)
-        vertical_heatmap = out.sum(dim=1).sum(dim=-1)   # Shape: [B, H]
-        # Sum along the height to get a horizontal heatmap (along W dimension)
-        horizontal_heatmap = out.sum(dim=1).sum(dim=-2)   # Shape: [B, W]
+        return (horizontal_heatmap, vertical_heatmap)   
 
-        # # Min-max normalization for vertical and horizontal heatmaps
-        vertical_heatmap = (vertical_heatmap - vertical_heatmap.min()) / (vertical_heatmap.max() - vertical_heatmap.min() + 1e-8)
-        horizontal_heatmap = (horizontal_heatmap - horizontal_heatmap.min()) / (horizontal_heatmap.max() - horizontal_heatmap.min() + 1e-8)
+def post_process(logits_output):
+    horizontal_heatmap, vertical_heatmap = logits_output
 
-        vertical_heatmap = torch.softmax(vertical_heatmap, dim=-1)
-        horizontal_heatmap = torch.softmax(horizontal_heatmap, dim=-1)
+    vertical_heatmap = torch.sigmoid(vertical_heatmap)
+    horizontal_heatmap = torch.sigmoid(horizontal_heatmap)     
 
-        return (horizontal_heatmap, vertical_heatmap)          
+    return (horizontal_heatmap, vertical_heatmap)  
 
 
 def build_motion_model(args):
@@ -360,20 +404,25 @@ if __name__ == '__main__':
     from config.config import parse_configs
     from data_process.dataloader import create_occlusion_train_val_dataloader
     from model.model_utils import get_num_parameters
-    from losses_metrics.losses import Heatmap_Ball_Detection_Loss_2D
-    from losses_metrics.metrics import heatmap_calculate_metrics_2d
 
     configs = parse_configs()
     configs.num_frames = 5
-    configs.device = 'cuda'
-    configs.batch_size = 4
-    configs.img_size = (360, 640)
+    configs.device = 'cpu'
+    configs.batch_size = 1
+    configs.img_size = (360, 6400)
     # Create dataloaders
-    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
-    batch_data, (masked_frameids, labels) = next(iter(train_dataloader))
-    batch_data = batch_data.to(configs.device)
+    # train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
+    # batch_data, (masked_frameids, labels, _, _) = next(iter(train_dataloader))
+    # batch_data = batch_data.to(configs.device)
+
+    # print(torch.unique(batch_data))
+    batch_data = torch.randn([8, 5, 3, 360, 640])
 
     B, N, C, H, W = batch_data.shape
+
+    # network = SaliencyMask().to(configs.device)
+    # print(f"attention model num params is {get_num_parameters(network)}")
+    # output = network(batch_data.float())
 
     motion_model = build_motion_model(configs)
     print(f"motion model num params is {get_num_parameters(motion_model)}")
@@ -384,5 +433,5 @@ if __name__ == '__main__':
     forward_pass_time = time.time() - start_time
     print(f"Forward pass time: {forward_pass_time:.4f} seconds")
     print(f"Features stacked_features Shape: {motion_features[0].shape}")  # Expected: [B*P, 3, 2048, 34, 60]
- 
+    print(torch.unique(motion_features[0]))
     

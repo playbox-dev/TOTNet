@@ -180,15 +180,18 @@ def precision_recall_f1_tracknet(pred_coords, target_coords, distance_threshold=
 
     # Determine true positives, false positives, and false negatives
     tp = (distances <= distance_threshold).sum().float()  # True positives
-    fp = (distances > distance_threshold).sum().float()   # False positives
-    fn = (target_coords.shape[0] - tp).float()            # False negatives
+    fp = (distances > distance_threshold).sum().float()   # False positives, something is true but we are saying its false? When distance of our prediction is larger than threshold
+    fn = (distances.min(dim=0).values > distance_threshold).sum().float()  # False negatives: targets with no close prediction
 
     # Precision, recall, and F1 score calculations
     precision = tp / (tp + fp + 1e-8)  # Adding epsilon to avoid division by zero
     recall = tp / (tp + fn + 1e-8)
     f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
 
-    return precision.item(), recall.item(), f1_score.item()
+    # Accuracy calculation
+    accuracy = tp / (tp + fp + fn + 1e-8)
+
+    return precision.item(), recall.item(), f1_score.item(), accuracy.item()
 
 def heatmap_calculate_metrics_2d(pred_heatmap, target_coords, scale=None):
     """

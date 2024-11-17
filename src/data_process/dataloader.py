@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.append('../')
 
-from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset
-from data_process.data_utils import get_all_detection_infor, train_val_data_separation
+from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset
+from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis
 from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask, RandomColorJitter
 
 
@@ -218,19 +218,24 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
     """Create dataloader for training and validation, with an option to use a subset of the data."""
 
     train_transform = Compose([
-        Resize(new_size=configs.img_size, p=1.0),
         RandomColorJitter(p=0.25),
         Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
         Random_Crop(max_reduction_percent=0.2, p=0.25),
+        Resize(new_size=configs.img_size, p=1.0),
+        Normalize(num_frames_sequence=configs.num_frames, p=1.0),
     ], p=1.)
 
+    
     # Load train and validation data information
     train_events_infor, val_events_infor, train_events_label, val_events_label = train_val_data_separation(configs)
 
-    # Create train dataset
-    train_dataset = Occlusion_Dataset(train_events_infor, train_events_label, transform=train_transform,
-                                   num_samples=configs.num_samples)
-    
+    if configs.dataset_choice == 'tt':
+        # Create train dataset
+        train_dataset = Occlusion_Dataset(train_events_infor, train_events_label, transform=train_transform,
+                                    num_samples=configs.num_samples)
+    else:
+        train_dataset = Tennis_Dataset(train_events_infor, train_events_label, transform=train_transform,
+                                    num_samples=configs.num_samples)
     # If subset_size is provided, create a subset for training
     if subset_size is not None:
         train_indices = torch.randperm(len(train_dataset))[:subset_size].tolist()
@@ -244,18 +249,23 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
     # Create train dataloader
     train_dataloader = DataLoader(train_dataset, batch_size=configs.batch_size, shuffle=(train_sampler is None),
                                   pin_memory=configs.pin_memory, num_workers=configs.num_workers, 
-                                  sampler=train_sampler, drop_last=True)
+                                  sampler=train_sampler, drop_last=False)
 
     # Create validation dataloader (without transformations)
     val_dataloader = None
     if not configs.no_val:
         val_transform = Compose([
-            Resize(new_size=configs.img_size, p=1.0),
             Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
+            Resize(new_size=configs.img_size, p=1.0),
+            Normalize(num_frames_sequence=configs.num_frames, p=1.0),
         ], p=1.)
-        val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
-                                     num_samples=configs.num_samples)
 
+        if configs.dataset_choice == 'tt':
+            val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
+                                        num_samples=configs.num_samples)
+        else:
+            val_dataset = Tennis_Dataset(val_events_infor, val_events_label, transform=val_transform,
+                                        num_samples=configs.num_samples)
         # If subset_size is provided, create a subset for validation
         if subset_size is not None:
             val_indices = torch.randperm(len(val_dataset))[:subset_size].tolist()
@@ -268,7 +278,7 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
         
         # Create validation dataloader
         val_dataloader = DataLoader(val_dataset, batch_size=configs.batch_size, shuffle=False,
-                                    pin_memory=configs.pin_memory, num_workers=configs.num_workers, sampler=val_sampler, drop_last=True)
+                                    pin_memory=configs.pin_memory, num_workers=configs.num_workers, sampler=val_sampler, drop_last=False)
 
     return train_dataloader, val_dataloader, train_sampler
 
@@ -276,12 +286,18 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
     """Create dataloader for testing phase"""
 
     test_transform = Compose([
-            Resize(new_size=configs.img_size, p=1.0),
             Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
+            Resize(new_size=configs.img_size, p=1.0),
+            Normalize(num_frames_sequence=configs.num_frames, p=1.0),
         ], p=1.)
     dataset_type = 'test'
-    test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
-    test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+    if configs.dataset_choice == 'tt':
+        test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
+        test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                 num_samples=configs.num_samples)
+    else:
+        test_events_infor, test_events_labels = get_all_detection_infor_tennis(configs.tennis_test_game_list, configs)
+        test_dataset = Tennis_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
     test_sampler = None
 
@@ -294,7 +310,7 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
         test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
     test_dataloader = DataLoader(test_dataset, batch_size=configs.batch_size, shuffle=False,
                                  pin_memory=configs.pin_memory, num_workers=configs.num_workers, 
-                                 sampler=test_sampler, drop_last=True)
+                                 sampler=test_sampler, drop_last=False)
 
     return test_dataloader
 
@@ -338,16 +354,16 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (360, 640)
+    configs.img_size = (288, 512)
     configs.interval = 1
     configs.num_frames = 5
     configs.occluded_prob = 0
+    configs.dataset_choice = 'tt'
 
     # Adjust ball position
-    w_ratio = 1920 / configs.img_size[1] # New width divided by original width
-    h_ratio = 1080 / configs.img_size[0] # New height divided by original height
-
-
+    w_ratio = 1920. / configs.img_size[1] # New width divided by original width
+    h_ratio = 1080. / configs.img_size[0] # New height divided by original height
+    print(f"w ration is {w_ratio}, h_ratio is {h_ratio}")
 
     # Create Masked dataloaders 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
@@ -356,12 +372,12 @@ if __name__ == '__main__':
     test_dataloader = create_occlusion_test_dataloader(configs, configs.num_samples)
     print(f"len test_loader {len(test_dataloader)}")
 
-    batch_data, (masked_frameids, labels) = next(iter(train_dataloader))
-
+    batch_data, (masked_frameids, labels, visability, status) = next(iter(train_dataloader))
+    # print(f"unique number of batch_data is {torch.unique(batch_data)}")
     # Check the shapes
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
     print(f'Batch labels shape: {labels.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
-    print(masked_frameids, labels, labels[0][0]*h_ratio, labels[0][1]*w_ratio)
+    print(masked_frameids, labels, torch.round(labels[0][0]*h_ratio), torch.round(labels[0][1]*w_ratio))
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]
 

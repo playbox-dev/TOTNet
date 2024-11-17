@@ -10,9 +10,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1/x2)
 
 def make_folder(folder_name):
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-    # or os.makedirs(folder_name, exist_ok=True)
+    os.makedirs(folder_name, exist_ok=True)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

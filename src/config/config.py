@@ -60,6 +60,8 @@ def parse_configs():
                         help="number of classes expected in detector")
     parser.add_argument('--num_queries', type=int, default=20,
                         help="numebr of queries in the transformer")
+    parser.add_argument('--model_choice', type=str, required=True,
+                        help="choice of model including wasb, tracknet, tracknetv2, mamba")
     
     ####################################################################
     ##############     Demonstration configurations     ###################
@@ -105,6 +107,10 @@ def parse_configs():
                         help='patience of the learning rate when using ReduceoPlateau scheduler')
     parser.add_argument('--occluded_prob', type=float, default=0.5, metavar='N',
                         help='occluded probability of ball')
+    parser.add_argument('--ball_size', type=int, default=5, metavar='N',
+                        help='ball size to determine percision recall and f1 socre')
+    parser.add_argument('--dataset_choice', type=str, default='tt', metavar='DC',
+                        help='which dataset to use tt for table tennis, tennis for tennis')
     parser.add_argument(
         '--img_size', 
         type=int, 
@@ -171,6 +177,12 @@ def parse_configs():
         'net': 3.,
     }
 
+    ###################################################################
+    ##############          Tennis dataset
+    ####################
+    configs.tennis_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/', 'tennis_data')
+    configs.tennis_train_game_list = ['game1', 'game2', 'game3', 'game4', 'game5', 'game6', 'game7', 'game8', 'game9', 'game10']
+    configs.tennis_test_game_list = []
 
     make_folder(configs.checkpoints_dir)
     make_folder(configs.logs_dir)
