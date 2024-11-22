@@ -296,3 +296,52 @@ def calculate_rmse_batched(pred_coords, label_coords):
     mean_rmse = torch.mean(rmse_per_sample)
 
     return mean_rmse.item()
+
+
+def classification_metrics(preds, labels, num_classes=4):
+    """
+    Calculate accuracy, precision, recall, and F1-score for classification.
+
+    Args:
+        preds (torch.Tensor): Predictions of shape [B, 4] (logits or probabilities).
+        labels (torch.Tensor): Ground truth of shape [B, 1].
+        num_classes (int): Number of classes.
+
+    Returns:
+        dict: A dictionary containing accuracy, precision, recall, and F1-score.
+    """
+    # Get predicted classes
+    _, predicted_classes = torch.max(preds, dim=1)  # [B]
+    labels = labels.view(-1)  # Flatten labels to [B]
+
+    # Calculate accuracy
+    correct = (predicted_classes == labels).sum().item()
+    total = labels.size(0)
+    accuracy = correct / total
+
+    # Confusion matrix
+    confusion_matrix = torch.zeros((num_classes, num_classes), device=preds.device)
+    for t, p in zip(labels, predicted_classes):
+        confusion_matrix[t.long(), p.long()] += 1
+
+    # True positives, false positives, false negatives
+    true_positives = torch.diag(confusion_matrix)
+    false_positives = confusion_matrix.sum(dim=0) - true_positives
+    false_negatives = confusion_matrix.sum(dim=1) - true_positives
+
+    # Precision, recall, F1-score
+    precision = true_positives / (true_positives + false_positives + 1e-8)
+    recall = true_positives / (true_positives + false_negatives + 1e-8)
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-8)
+
+    # Macro averages
+    macro_precision = precision.mean().item()
+    macro_recall = recall.mean().item()
+    macro_f1 = f1.mean().item()
+
+    return {
+        "accuracy": accuracy,
+        "precision": macro_precision,
+        "recall": macro_recall,
+        "f1_score": macro_f1
+    }

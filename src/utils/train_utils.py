@@ -36,6 +36,8 @@ def create_optimizer(configs, model):
                                     weight_decay=configs.weight_decay)
     elif configs.optimizer_type == 'adam':
         optimizer = torch.optim.Adam(train_params, lr=configs.lr, weight_decay=configs.weight_decay)
+    elif configs.optimizer_type == 'adamw':
+        optimizer = torch.optim.adamw(train_params, lr=configs.lr, weight_decay=configs.weight_decay)
     else:
         assert False, "Unknown optimizer type"
 

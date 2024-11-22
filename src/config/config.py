@@ -93,8 +93,8 @@ def parse_configs():
                         help='minimum learning rate during training')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='momentum')
-    parser.add_argument('-wd', '--weight_decay', type=float, default=0., metavar='WD',
-                        help='weight decay (default: 1e-6)')
+    parser.add_argument('-wd', '--weight_decay', type=float, default=1e-5, metavar='WD',
+                        help='weight decay (default: 1e-5)')
     parser.add_argument('--optimizer_type', type=str, default='adam', metavar='OPTIMIZER',
                         help='the type of optimizer, it can be sgd or adam')
     parser.add_argument('--lr_type', type=str, default='plateau', metavar='SCHEDULER',
@@ -181,8 +181,8 @@ def parse_configs():
     ##############          Tennis dataset
     ####################
     configs.tennis_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/', 'tennis_data')
-    configs.tennis_train_game_list = ['game1', 'game2', 'game3', 'game4', 'game5', 'game6', 'game7', 'game8', 'game9', 'game10']
-    configs.tennis_test_game_list = []
+    configs.tennis_train_game_list = ['game1', 'game2', 'game3', 'game4', 'game5', 'game6', 'game7', 'game8']
+    configs.tennis_test_game_list = ['game9', 'game10']
 
     make_folder(configs.checkpoints_dir)
     make_folder(configs.logs_dir)

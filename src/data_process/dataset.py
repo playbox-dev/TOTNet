@@ -201,7 +201,8 @@ class Occlusion_Dataset(Dataset):
             i+=1
         
         image_list_np = np.array(image_list)
-        return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), np.array([]), np.array([]))
+        status = -1 
+        return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), np.array([]), status)
 
 
 

@@ -190,7 +190,7 @@ class BallTrackerNetV2(nn.Module):
         vertical_heatmap = torch.softmax(vertical_heatmap, dim=-1)
         horizontal_heatmap = torch.softmax(horizontal_heatmap, dim=-1)
 
-        return (horizontal_heatmap, vertical_heatmap)               
+        return (horizontal_heatmap, vertical_heatmap), None              
     
     def _init_weights(self):
         for module in self.modules():

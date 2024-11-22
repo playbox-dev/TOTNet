@@ -356,7 +356,7 @@ if __name__ == '__main__':
     configs.batch_size = 1
     configs.img_size = (288, 512)
     configs.interval = 1
-    configs.num_frames = 5
+    configs.num_frames = 9
     configs.occluded_prob = 0
     configs.dataset_choice = 'tt'
 
@@ -377,6 +377,7 @@ if __name__ == '__main__':
     # Check the shapes
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
     print(f'Batch labels shape: {labels.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
+    print(torch.unique(labels))
     print(masked_frameids, labels, torch.round(labels[0][0]*h_ratio), torch.round(labels[0][1]*w_ratio))
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]

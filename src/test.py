@@ -15,9 +15,11 @@ from model.model_utils import make_data_parallel, get_num_parameters, load_pretr
 # from model.deformable_detection_model import build_detector
 # from model.propose_model import build_detector
 from model.tracknet import build_TrackerNet, build_TrackNetV2
+from model.mamba_model import build_mamba
+from model.two_stream_network import build_two_streams_model
 from model.wasb import build_wasb
 from model.motion_model import build_motion_model
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap
 from config.config import parse_configs
@@ -66,11 +68,17 @@ def main_worker(gpu_idx, configs):
     configs.is_master_node = (not configs.distributed) or (
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
-    # model = build_detector(configs)
-    # model = build_TrackerNet(configs)
-    # model = build_TrackNetV2(configs)
-    # model = build_motion_model(configs)
-    model = build_wasb(configs)
+    if configs.model_choice == 'wasb':
+        model = build_wasb(configs)
+    if configs.model_choice == 'tracknetv2':
+        model = build_TrackNetV2(configs)
+    if configs.model_choice == 'mamba':
+        model = build_mamba(configs)
+    if configs.model_choice == 'motion':
+        model = build_motion_model(configs)
+    if configs.model_choice == 'two_stream_model':
+        model = build_two_streams_model(configs)
+
 
     model = make_data_parallel(model, configs)
 
@@ -83,6 +91,7 @@ def main_worker(gpu_idx, configs):
     # Load dataset
     # test_loader = create_normal_test_dataloader(configs)
     # train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
+    # print(f"number of batches in test is {len(val_loader)}")
     # test(val_loader, model, configs)
 
     test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
@@ -99,6 +108,10 @@ def test(test_loader, model, configs):
     percision_overall = AverageMeter('Percision', '6.4f')
     recall_overall = AverageMeter('Recall', '6.4f')
     f1_overall = AverageMeter('F1', '6.4f')
+    cls_accuracy_overall = AverageMeter('Cls Accuracy', ':6.4f')
+    cls_precision_overall = AverageMeter('Cls Precision', ':6.4f')
+    cls_recall_overall = AverageMeter('Cls Recall', ':6.4f')
+    cls_f1_overall = AverageMeter('Cls F1', ':6.4f')
 
     x_scale = configs.org_size[1]/configs.img_size[1]
     y_scale = configs.org_size[0]/configs.img_size[0]
@@ -107,7 +120,7 @@ def test(test_loader, model, configs):
     model.eval()
     with torch.no_grad():
         start_time = time.time()
-        for batch_idx, (batch_data, (_, labels, _, _)) in enumerate(tqdm(test_loader)):
+        for batch_idx, (batch_data, (_, labels, visibility, _)) in enumerate(tqdm(test_loader)):
 
             print(f'\n===================== batch_idx: {batch_idx} ================================')
 
@@ -119,21 +132,36 @@ def test(test_loader, model, configs):
             labels = labels.float()
             # compute output
 
-            #for tracknet we need to rehsape the data
-            B, N, C, H, W = batch_data.shape
-            # Permute to bring frames and channels together
-            batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
-            # Reshape to combine frames into the channel dimension
-            batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
+                # #for tracknet we need to rehsape the data
+                B, N, C, H, W = batch_data.shape
+                # Permute to bring frames and channels together
+                batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+                # Reshape to combine frames into the channel dimension
+                batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+
 
             with torch.autocast(device_type='cuda'):
-                output_heatmap = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
+                output_heatmap, cls_score = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
       
         
             mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
             post_processed_coords = extract_coords(output_heatmap)
             percision, recall, f1, accuracy = precision_recall_f1_tracknet(post_processed_coords, labels, distance_threshold=configs.ball_size)
             pred_x_logits, pred_y_logits = output_heatmap
+
+            if cls_score == None:
+                cls_accuracy = torch.tensor(1e-8, device=configs.device)
+                cls_precision = torch.tensor(1e-8, device=configs.device)
+                cls_recall = torch.tensor(1e-8, device=configs.device)
+                cls_f1 = torch.tensor(1e-8, device=configs.device)
+            else:
+                cls_dict = classification_metrics(cls_score, visibility)
+                cls_accuracy= cls_dict['accuracy']
+                cls_precision = cls_dict['precision']
+                cls_recall = cls_dict['recall']
+                cls_f1= cls_dict['f1_score']
+
 
 
             for sample_idx in range(batch_size):
@@ -166,9 +194,13 @@ def test(test_loader, model, configs):
             recall_overall.update(recall)
             f1_overall.update(f1)
             accuracy_overall.update(accuracy)
+            cls_accuracy_overall.update(cls_accuracy)
+            cls_precision_overall.update(cls_precision)
+            cls_recall_overall.update(cls_recall)
+            cls_f1_overall.update(cls_f1)
 
     print(
-        'rmse_global: {:.4f}, real_rmse {:.4f}, Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}'.format(rmse_overall.avg, real_rmse.avg, accuracy_overall.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg))
+        'rmse_global: {:.4f}, real_rmse {:.4f}, Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}, Classification Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}'.format(rmse_overall.avg, real_rmse.avg, accuracy_overall.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg, cls_accuracy_overall.avg, cls_precision_overall.avg, cls_recall_overall.avg, cls_f1_overall.avg))
     print('Done testing')
 
 

@@ -484,7 +484,7 @@ class HRNet(nn.Module):
                 x = self.deconv_layers[i][scale](x)
             y = self.final_layers[scale](x)
             y_out[scale] = post_process_heatmap(y)
-        return y_out[0][0], y_out[0][1]
+        return (y_out[0][0], y_out[0][1]), None
 
     def init_weights(self, pretrained='',):
         logger.info('=> init weights from normal distribution')
@@ -565,7 +565,7 @@ if __name__=='__main__':
     stacked_data = stacked_data.to(configs.device)
 
     model = build_wasb(configs)
-    vertical_heatmap, horizontal_heatmap = model(stacked_data)
+    horizontal_heatmap, vertical_heatmap = model(stacked_data)
     # print(y[0].shape, y[1].shape)
     print(vertical_heatmap.shape, horizontal_heatmap.shape)
     print(torch.unique(vertical_heatmap))

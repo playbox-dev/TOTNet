@@ -1,15 +1,11 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 
-
-import torch
-import torch.nn as nn
 
 class Heatmap_Ball_Detection_Loss(nn.Module):
-    def __init__(self, h, w):
+    def __init__(self):
         super(Heatmap_Ball_Detection_Loss, self).__init__()
-        self.h = h  # Image height
-        self.w = w  # Image width
         self.loss = nn.BCELoss() # Use BCEWithLogitsLoss for logits
 
     def forward(self, output, target_ball_position):
@@ -152,6 +148,18 @@ class HeatmapBallDetectionLoss(nn.Module):
 
         # Return the combined loss
         return total_loss_x + total_loss_y
+
+
+
+def focal_loss(pred_logits, labels, alpha=1.0, gamma=2.0):
+    # Convert logits to probabilities
+    pred_probs = F.softmax(pred_logits, dim=-1)  # [B, 4]
+    labels_one_hot = F.one_hot(labels.squeeze(-1).long(), num_classes=4)  # [B, 4]
+    
+    # Compute focal loss
+    pt = (pred_probs * labels_one_hot).sum(dim=1)  # Probabilities of true classes
+    loss = -alpha * (1 - pt) ** gamma * torch.log(pt + 1e-12)
+    return loss.mean()
 
 def calculate_rmse_from_heatmap(output, labels, scale=None):
     """

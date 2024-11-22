@@ -3,27 +3,186 @@
 #SBATCH --gres=gpu:2
 #SBATCH --job-name=Aug_occl
 
-# single node multiple gpu
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_wasb_tennis'   \
+#     --interval 1   \
+#     --num_frames 3  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'wasb'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_tracknetv2_tennis'   \
+#     --interval 1   \
+#     --num_frames 3  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'tracknetv2'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+
 torchrun --nproc_per_node=2 main.py     \
     --num_epochs 30   \
-    --saved_fn 'normal_tracking_360_640_tracknetv2_tt'   \
+    --saved_fn 'normal_tracking_288_512_motion_tennis'   \
     --interval 1   \
-    --num_frames 5  \
+    --num_frames 3  \
     --lr 1e-3 \
-    --img_size 360 640 \
+    --weight_decay 1e-5 \
+    --img_size 288 512 \
     --batch_size 16 \
     --print_freq 100 \
     --dist_url 'env://' \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --distributed \
-    --dataset_choice 'tt' \
-    --model_choice 'tracknetv2'  \
+    --dataset_choice 'tennis' \
+    --model_choice 'motion'  \
     --occluded_prob 0 \
-    --ball_size 1 \
+    --ball_size 5 \
+    --no_test   \
     --val-size 0.2 \
-    --no_test     \
-    # --num_samples 100  \
+
+
+# # # single node multiple gpu
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_2sm_tennis(5)'   \
+#     --interval 1   \
+#     --num_frames 5  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'two_stream_model'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+#     # --num_samples 1000  \
+
+# # # single node multiple gpu
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_2sm_tennis(7)'   \
+#     --interval 1   \
+#     --num_frames 7  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'two_stream_model'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+#     # --num_samples 1000  \
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_wasb_tennis(5)'   \
+#     --interval 1   \
+#     --num_frames 5  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'wasb'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_wasb_tennis(7)'   \
+#     --interval 1   \
+#     --num_frames 7  \
+#     --lr 1e-3 \
+#     --weight_decay 1e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tennis' \
+#     --model_choice 'wasb'  \
+#     --occluded_prob 0 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+
+
+
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 30   \
+#     --saved_fn 'normal_tracking_288_512_wasb_tt'   \
+#     --interval 1   \
+#     --num_frames 5  \
+#     --lr 1e-3 \
+#     --img_size 288 512 \
+#     --batch_size 64 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tt' \
+#     --model_choice 'wasb'  \
+#     --occluded_prob 0 \
+#     --ball_size 1 \
+#     --val-size 0.2 \
+#     --no_test     \
 
 
 # single node single gpu, train data total length
