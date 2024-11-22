@@ -53,7 +53,8 @@ torchrun --nproc_per_node=2 main.py     \
     --saved_fn 'normal_tracking_288_512_motion_tennis'   \
     --interval 1   \
     --num_frames 3  \
-    --lr 1e-3 \
+    --optimizer_type adamw  \
+    --lr 3e-4 \
     --weight_decay 1e-5 \
     --img_size 288 512 \
     --batch_size 16 \
@@ -65,7 +66,7 @@ torchrun --nproc_per_node=2 main.py     \
     --dataset_choice 'tennis' \
     --model_choice 'motion'  \
     --occluded_prob 0 \
-    --ball_size 5 \
+    --ball_size 4 \
     --no_test   \
     --val-size 0.2 \
 

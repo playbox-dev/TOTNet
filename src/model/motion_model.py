@@ -94,14 +94,20 @@ class EncoderBlock(nn.Module):
         return x, spatial_out, temporal_out
 
 class DecoderBlock(nn.Module):
-    def __init__(self, num_frames, in_channels, out_channels, kernel_size, padding, bias=True, final=False):
+    def __init__(self, num_frames, up_channels, in_channels, out_channels, kernel_size, padding, bias=True, final=False):
         super().__init__()
         self.num_frames = num_frames
         self.out_channels = out_channels
         self.final = final
+        # self.up = nn.ConvTranspose2d(
+        #     in_channels=up_channels,
+        #     out_channels=up_channels,
+        #     kernel_size=2,  # Kernel size for 2x upsampling
+        #     stride=2
+        # )
+        self.up = nn.Upsample(scale_factor=2)
         self.conv1 = ConvBlock(in_channels, out_channels)
         self.conv2 = ConvBlock(out_channels, out_channels)
-        self.up = nn.Upsample(scale_factor=2, mode='nearest')
         if final == True:
             self.residual_proj = nn.Conv3d(out_channels, 1, kernel_size=1) 
             self.temp_conv = TemporalConvBlock(out_channels*2, 1, kernel_size, padding, bias)
@@ -112,6 +118,7 @@ class DecoderBlock(nn.Module):
         # input in shape [BN, C, H, W]
         BN, _, _, _ = x.shape
         B = BN//self.num_frames
+
         x = self.up(x)
         x = torch.concat((x, spatial_concat), dim=1)
         x = self.conv1(x)
@@ -166,13 +173,16 @@ class TemporalConvNet(nn.Module):
         self.temporal_conv4 = TemporalConvBlock(in_channels=self.convblock3_out_channels, out_channels=self.convblock3_out_channels, kernel_size=9, padding=9//2)
 
         #block 5
-        self.block5 = DecoderBlock(num_frames, self.convblock3_out_channels+self.convblock2_out_channels, self.convblock2_out_channels, 7, padding=7//2)
+        self.block5 = DecoderBlock(num_frames, self.convblock3_out_channels, self.convblock3_out_channels+self.convblock2_out_channels, self.convblock2_out_channels, 7, padding=7//2)
 
         #block 6
-        self.block6 = DecoderBlock(num_frames, self.convblock2_out_channels+self.convblock1_out_channels, self.convblock1_out_channels, 5, 5//2 )
+        self.block6 = DecoderBlock(num_frames, self.convblock2_out_channels, self.convblock2_out_channels+self.convblock1_out_channels, self.convblock1_out_channels, 5, 5//2 )
 
         #block 7
-        self.block7 = DecoderBlock(num_frames, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 3, padding=1, final=True)
+        self.block7 = DecoderBlock(num_frames, self.convblock1_out_channels, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 3, padding=1, final=True)
+
+        # projection block
+        self.temp_reduce = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=(num_frames, 1, 1), stride=(1,1,1), padding=(0,0,0))
         
         self._init_weights()
 
@@ -197,7 +207,7 @@ class TemporalConvNet(nn.Module):
         B, N, C, H, W = x.shape
         
         # Reshape to [B*N, C, H, W] for spatial convolutions
-        x = x.view(B * N, C, H, W)  # Merge batch and frame dimensions
+        x = rearrange(x, 'b n c h w -> (b n) c h w', b=B, n=N) # Merge batch and frame dimensions
 
         # Block 1
         x, spatial_out1, temporal_out1 = self.block1(x)
@@ -233,8 +243,13 @@ class TemporalConvNet(nn.Module):
         temporal_weights = torch.softmax(self.temporal_weights, dim=0).view(1, N, 1, 1, 1)
         x = (x * temporal_weights).sum(dim=1)  # Weighted sum across frames  #[B, C, H, W]
         # x = x[:, -1, :, :, :]  # [B, C, H, W]
-        
         out = x.squeeze(dim=1) # [B, H, W]
+
+        # use 3dconv to reduce temporal dim
+        # x = rearrange(x, "(b n) c h w -> b c n h w", b=B, n=N)
+        # x = self.temp_reduce(x)
+        # out = x.squeeze(dim=1).squeeze(dim=1)
+        
       
         # Sum along the width to get a vertical heatmap (along H dimension)
         vertical_heatmap = out.max(dim=2)[0]   # Shape: [B, H]
