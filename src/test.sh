@@ -5,7 +5,7 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_motion_tennis' \
+  --saved_fn 'normal_tracking_288_512_motion_tennis(4)' \
   --model_choice 'motion'  \
   --gpu_idx 0   \
   --batch_size 8   \
@@ -15,7 +15,7 @@ python test.py \
   --occluded_prob 0 \
   --dataset_choice 'tennis' \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_tennis/normal_tracking_288_512_motion_tennis_best.pth' \
+  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_tennis(4)/normal_tracking_288_512_motion_tennis(4)_epoch_22.pth' \
 
 
 # deformable 
