@@ -152,6 +152,17 @@ class HeatmapBallDetectionLoss(nn.Module):
 
 
 def focal_loss(pred_logits, labels, alpha=1.0, gamma=2.0):
+    """_summary_
+
+    Args:
+        pred_logits (tensor): _description_
+        labels (_type_): _description_
+        alpha (float, optional): _description_. Defaults to 1.0.
+        gamma (float, optional): _description_. Defaults to 2.0.
+
+    Returns:
+        _type_: _description_
+    """
     # Convert logits to probabilities
     pred_probs = F.softmax(pred_logits, dim=-1)  # [B, 4]
     labels_one_hot = F.one_hot(labels.squeeze(-1).long(), num_classes=4)  # [B, 4]

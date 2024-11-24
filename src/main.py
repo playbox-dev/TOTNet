@@ -276,7 +276,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
         if cls_score == None:
             cls_loss = torch.tensor(1e-8, device=configs.device)
         else:
-            cls_loss = focal_loss(cls_score, visibiltity)
+            cls_loss = focal_loss(cls_score, visibiltity) * 0.1
         heatmap_loss = loss_func(output_heatmap, labels)
         total_loss = heatmap_loss + cls_loss
 
@@ -375,7 +375,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             if cls_score == None:
                 cls_loss = torch.tensor(1e-8, device=configs.device)
             else:
-                cls_loss = focal_loss(cls_score, visibility)
+                cls_loss = focal_loss(cls_score, visibility) * 0.1 
             heatmap_loss = loss_func(output_heatmap, labels)
             total_loss = heatmap_loss + cls_loss
 

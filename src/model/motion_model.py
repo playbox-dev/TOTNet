@@ -227,7 +227,27 @@ class BottleNeckBlock(nn.Module):
 
         return x
 
+class ClassificationHead(nn.Module):
+    def __init__(self, input_dim, hidden_dims, output_dim, dropout=0.1):
+        super(ClassificationHead, self).__init__()
+        
+        # Create a list of layers
+        layers = []
+        in_dim = input_dim
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(in_dim, hidden_dim))  # Linear layer
+            layers.append(nn.ReLU())                     # Activation
+            layers.append(nn.Dropout(dropout))               # Optional dropout
+            in_dim = hidden_dim
+        
+        # Final classification layer
+        layers.append(nn.Linear(in_dim, output_dim))  # Linear layer for output classes
+        
+        # Combine layers into a Sequential model
+        self.network = nn.Sequential(*layers)
 
+    def forward(self, x):
+        return self.network(x)
 
 class TemporalConvNet(nn.Module):
     def __init__(self, input_channels=3, spatial_channels=64, num_frames=5):
@@ -272,13 +292,15 @@ class TemporalConvNet(nn.Module):
 
         #block 7
         self.block7 = DecoderBlock(num_frames, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 
-                                   spatial_kernel_size=3, temporal_kernel_size=(2, 3, 3), final=True)
+                                   spatial_kernel_size=3, temporal_kernel_size=(2, 3, 3), final=False)
 
-        # Weighted pooling parameters across frames
-        self.temporal_weights = nn.Parameter(torch.ones(num_frames), requires_grad=True)
+
+        #project for cls
+        # self.cls_project = nn.Linear(147456, 4)
+        # self.cls_project = ClassificationHead(input_dim=14756, hidden_dims=[1024, 256], output_dim=4, dropout=0.1)
 
         # projection block
-        self.temp_reduce = TemporalConvBlock(in_channels=1, out_channels=1, kernel_size=(num_frames, 1, 1), padding=(0, 0, 0))
+        self.temp_reduce = TemporalConvBlock(in_channels=self.spatial_channels, out_channels=1, kernel_size=(num_frames, 1, 1), padding=(0, 0, 0))
         
         self._init_weights()
 
@@ -291,6 +313,11 @@ class TemporalConvNet(nn.Module):
             elif isinstance(module, (nn.BatchNorm3d, nn.BatchNorm2d, nn.BatchNorm1d)):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0) 
+            elif isinstance(module, nn.Linear):
+                # Initialize linear layers
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
 
 
     def forward(self, x):
@@ -314,7 +341,7 @@ class TemporalConvNet(nn.Module):
         # Block 3
         x, spatial_out3, temporal_out3 = self.block3(x)
 
-        # block 4 bottle nect 
+        # block 4 bottleneck
         x = self.bottle_neck(x)
        
         # block 5
@@ -324,20 +351,14 @@ class TemporalConvNet(nn.Module):
         x = self.block6(x, spatial_out2, temporal_out2)
 
         # block 7
-        x = self.block7(x, spatial_out1, temporal_out1) #outputs [B*N, C, H, W] C = 1 
-        # final project 
-        # x = rearrange(x, "(b n) c h w -> b n c h w", b=B, n=N)
-        # temporal_weights = torch.softmax(self.temporal_weights, dim=0).view(1, N, 1, 1, 1)
-        # x = (x * temporal_weights).sum(dim=1)  # Weighted sum across frames  #[B, C, H, W]
-        # # x = x[:, -1, :, :, :]  # [B, C, H, W]
-        # out = x.squeeze(dim=1) # [B, H, W]
+        x = self.block7(x, spatial_out1, temporal_out1) #outputs [B*N, C, H, W] 
 
+    
         # use 3dconv to reduce temporal dim
         x = rearrange(x, "(b n) c h w -> b c n h w", b=B, n=N)
-        x = self.temp_reduce(x)
-        out = x.squeeze(dim=1).squeeze(dim=1)
-        
-      
+        x = self.temp_reduce(x) 
+        out = x.squeeze(dim=1).squeeze(dim=1) #[B, H, W]
+
         # Sum along the width to get a vertical heatmap (along H dimension)
         vertical_heatmap = out.max(dim=2)[0]   # Shape: [B, H]
         # Sum along the height to get a horizontal heatmap (along W dimension)
@@ -398,5 +419,6 @@ if __name__ == '__main__':
     forward_pass_time = time.time() - start_time
     print(f"Forward pass time: {forward_pass_time:.4f} seconds")
     print(f"Features stacked_features Shape: horizontal {motion_features[0].shape},   vertical {motion_features[1].shape}")  # Expected: [B*P, 3, 2048, 34, 60]
+    print(f"cls score is {cls}")
     print(torch.unique(motion_features[0]))
     

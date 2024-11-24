@@ -49,10 +49,10 @@
 #     --val-size 0.2 \
 
 torchrun --nproc_per_node=2 main.py     \
-    --num_epochs 30   \
-    --saved_fn 'normal_tracking_288_512_motion_tennis(4)'   \
+    --num_epochs 20   \
+    --saved_fn 'normal_tracking_288_512_motion_tennis(5)'   \
     --interval 1   \
-    --num_frames 3  \
+    --num_frames 5  \
     --optimizer_type adamw  \
     --lr 5e-4 \
     --weight_decay 5e-5 \
