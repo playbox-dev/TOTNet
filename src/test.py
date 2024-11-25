@@ -100,38 +100,43 @@ def main_worker(gpu_idx, configs):
 
 
 def test(test_loader, model, configs):
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
+    # Initialize metrics for each visibility category
+    visibility_metrics = { 
+        vis: {
+            "rmse": AverageMeter(f"RMSE_Vis_{vis}", ":6.4f"),
+            "accuracy": AverageMeter(f"Accuracy_Vis_{vis}", "6.4f"),
+            "precision": AverageMeter(f"Precision_Vis_{vis}", "6.4f"),
+            "recall": AverageMeter(f"Recall_Vis_{vis}", "6.4f"),
+            "f1": AverageMeter(f"F1_Vis_{vis}", "6.4f"),
+        } for vis in range(4)  # Assuming visibility levels 0 to 3
+    }
+
+    # Overall metrics
     rmse_overall = AverageMeter('RMSE_Overall', ':6.4f')
-    real_rmse = AverageMeter('Real_RMSE', ':6.4f')
     accuracy_overall = AverageMeter('Accuracy', '6.4f')
-    percision_overall = AverageMeter('Percision', '6.4f')
+    precision_overall = AverageMeter('Precision', '6.4f')
     recall_overall = AverageMeter('Recall', '6.4f')
     f1_overall = AverageMeter('F1', '6.4f')
-    cls_accuracy_overall = AverageMeter('Cls Accuracy', ':6.4f')
-    cls_precision_overall = AverageMeter('Cls Precision', ':6.4f')
-    cls_recall_overall = AverageMeter('Cls Recall', ':6.4f')
-    cls_f1_overall = AverageMeter('Cls F1', ':6.4f')
 
-    x_scale = configs.org_size[1]/configs.img_size[1]
-    y_scale = configs.org_size[0]/configs.img_size[0]
+    x_scale = configs.org_size[1] / configs.img_size[1]
+    y_scale = configs.org_size[0] / configs.img_size[0]
+
+    # calculate fps rate
+    total_time = 0
+    total_frames = 0
 
     # switch to evaluate mode
     model.eval()
+    start_time = time.perf_counter()  # Start timing
     with torch.no_grad():
-        start_time = time.time()
         for batch_idx, (batch_data, (_, labels, visibility, _)) in enumerate(tqdm(test_loader)):
-
-            print(f'\n===================== batch_idx: {batch_idx} ================================')
-
-            data_time.update(time.time() - start_time)
             batch_size = batch_data.size(0)
-
             batch_data = batch_data.to(configs.device)
+            num_frames = batch_data.size(1)
             labels = labels.to(configs.device)
-            labels = labels.float()
-            # compute output
+            visibility = visibility.to(configs.device)
 
+            # Compute output
             if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
                 # #for tracknet we need to rehsape the data
                 B, N, C, H, W = batch_data.shape
@@ -140,68 +145,79 @@ def test(test_loader, model, configs):
                 # Reshape to combine frames into the channel dimension
                 batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
 
+           
+            output_heatmap, _ = model(batch_data.float())
+           
 
-            with torch.autocast(device_type='cuda'):
-                output_heatmap, cls_score = model(batch_data.float()) # output in shape ([B, W],[B, H]) if output heatmap
-      
-        
-            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
+            mse, rmse, _, _ = heatmap_calculate_metrics(output_heatmap, labels)
             post_processed_coords = extract_coords(output_heatmap)
-            percision, recall, f1, accuracy = precision_recall_f1_tracknet(post_processed_coords, labels, distance_threshold=configs.ball_size)
-            pred_x_logits, pred_y_logits = output_heatmap
+            precision, recall, f1, accuracy = precision_recall_f1_tracknet(
+                post_processed_coords, labels, distance_threshold=configs.ball_size
+            )
 
-            if cls_score == None:
-                cls_accuracy = torch.tensor(1e-8, device=configs.device)
-                cls_precision = torch.tensor(1e-8, device=configs.device)
-                cls_recall = torch.tensor(1e-8, device=configs.device)
-                cls_f1 = torch.tensor(1e-8, device=configs.device)
-            else:
-                cls_dict = classification_metrics(cls_score, visibility)
-                cls_accuracy= cls_dict['accuracy']
-                cls_precision = cls_dict['precision']
-                cls_recall = cls_dict['recall']
-                cls_f1= cls_dict['f1_score']
-
-
-
+            # Update metrics for each sample by visibility
             for sample_idx in range(batch_size):
-                pred_x_logit = pred_x_logits[sample_idx]  # Shape: [W]
-                pred_y_logit = pred_y_logits[sample_idx]  # Shape: [H]
+                vis_label = visibility[sample_idx].item()  # Visibility label for this sample
                 label = labels[sample_idx]
-                # Predicted coordinates are extracted by taking the argmax over logits
-                x_pred_indice = torch.argmax(pred_x_logit, dim=0)  # [W] -> scalar representing the predicted x index
-                y_pred_indice = torch.argmax(pred_y_logit, dim=0)  # [H] -> scalar representing the predicted y index
-                # Convert indices to float for calculations
-                x_pred = x_pred_indice.float()
-                y_pred = y_pred_indice.float()
+                pred_coords = post_processed_coords[sample_idx]
+                x_pred, y_pred = pred_coords[0], pred_coords[1]
 
-                original_x, original_y = label[0].item()*x_scale, label[1].item()*y_scale
-                rescaled_x_pred, rescaled_y_pred = x_pred*x_scale, y_pred*y_scale
-                original_rmse = calculate_rmse(original_x, original_y, rescaled_x_pred, rescaled_y_pred)
-                real_rmse.update(original_rmse)
+                # Compute RMSE for this sample
+                original_x, original_y = label[0].item() * x_scale, label[1].item() * y_scale
+                rescaled_x_pred, rescaled_y_pred = pred_coords[0] * x_scale, pred_coords[1] * y_scale
+                sample_rmse = calculate_rmse(label[0], label[1], x_pred, y_pred)
+
+                # Check if prediction is within threshold for accuracy
+                dist = torch.sqrt((pred_coords[0] - label[0])**2 + (pred_coords[1] - label[1])**2)
+                within_threshold = dist <= configs.ball_size
+                sample_accuracy = 1 if within_threshold else 0
+
+                # Calculate precision and recall for this sample
+                # Assuming you have functions for individual precision and recall
+                sample_precision = precision if within_threshold else 0
+                sample_recall = recall if within_threshold else 0
+                sample_f1 = f1 if within_threshold else 0
+
+                # Update visibility-specific metrics
+                visibility_metrics[vis_label]["rmse"].update(sample_rmse)
+                visibility_metrics[vis_label]["accuracy"].update(sample_accuracy)
+                visibility_metrics[vis_label]["precision"].update(sample_precision)
+                visibility_metrics[vis_label]["recall"].update(sample_recall)
+                visibility_metrics[vis_label]["f1"].update(sample_f1)
 
                 print('Ball Detection - \t Overall: \t (x, y) - org: ({}, {}), prediction = ({}, {}), Original Size org({},{}), prediction = ({},{})'.format(
                         label[0].item(), label[1].item(), x_pred.item(), y_pred.item(), original_x, original_y, rescaled_x_pred, rescaled_y_pred))
 
-                if ((batch_idx + 1) % configs.print_freq) == 0:
-                    print(
-                        'batch_idx: {}  rmse_global: {:.1f}, real_rmse {:.1f}'.format(batch_idx, rmse, original_rmse))
 
-                batch_time.update(time.time() - start_time)
-                start_time = time.time()
+            # Update overall metrics
             rmse_overall.update(rmse)
-            percision_overall.update(percision)
+            accuracy_overall.update(accuracy)
+            precision_overall.update(precision)
             recall_overall.update(recall)
             f1_overall.update(f1)
-            accuracy_overall.update(accuracy)
-            cls_accuracy_overall.update(cls_accuracy)
-            cls_precision_overall.update(cls_precision)
-            cls_recall_overall.update(cls_recall)
-            cls_f1_overall.update(cls_f1)
 
+    end_time = time.perf_counter()  # End timing
+
+    total_time += end_time - start_time  # Accumulate time
+    total_frames = len(test_loader)*batch_size
+
+    fps = total_frames / total_time if total_time > 0 else 0
+
+    # Print results for each visibility category
+    print("===== Visibility-Specific Results =====")
+    for vis_label, metrics in visibility_metrics.items():
+        print(
+            f"Visibility {vis_label}: RMSE: {metrics['rmse'].avg:.4f}, "
+            f"Accuracy: {metrics['accuracy'].avg:.4f}, Precision: {metrics['precision'].avg:.4f}, "
+            f"Recall: {metrics['recall'].avg:.4f}, F1: {metrics['f1'].avg:.4f}"
+        )
+    
+    # Print overall results
     print(
-        'rmse_global: {:.4f}, real_rmse {:.4f}, Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}, Classification Accuracy {:.4f}, Precision {:.4f}, recall {:.4f}, f1 {:.4f}'.format(rmse_overall.avg, real_rmse.avg, accuracy_overall.avg, percision_overall.avg, recall_overall.avg, f1_overall.avg, cls_accuracy_overall.avg, cls_precision_overall.avg, cls_recall_overall.avg, cls_f1_overall.avg))
-    print('Done testing')
+        f"Overall Results: RMSE: {rmse_overall.avg:.4f}, Accuracy: {accuracy_overall.avg:.4f}, \n"
+        f"Precision: {precision_overall.avg:.4f}, Recall: {recall_overall.avg:.4f}, F1: {f1_overall.avg:.4f}, \n"
+        f"Model fps rate: {fps:.0f}"
+    )
 
 
 if __name__ == '__main__':

@@ -199,11 +199,19 @@ def main_worker(configs):
         if tb_writer is not None:
             tb_writer.add_scalars('Loss', loss_dict, epoch)
         # Save checkpoint
-        if configs.is_master_node and (is_best or ((epoch % configs.checkpoint_freq) == 0)):
+        if configs.is_master_node:
             saved_state = get_saved_state(model, optimizer, lr_scheduler, epoch, configs, best_val_loss,
-                                          earlystop_count)
-            save_checkpoint(configs.checkpoints_dir, configs.saved_fn, saved_state, is_best, epoch)
-            logger.info(f"new checkpoint has been saved")
+                                        earlystop_count)
+            
+            # Save checkpoint if it's the best
+            if is_best:
+                save_checkpoint(configs.checkpoints_dir, configs.saved_fn, saved_state, is_best=True, epoch=epoch)
+                logger.info(f"Best checkpoint has been saved at epoch {epoch}")
+            
+            # Save checkpoint based on checkpoint frequency
+            if (epoch % configs.checkpoint_freq) == 0:
+                save_checkpoint(configs.checkpoints_dir, configs.saved_fn, saved_state, is_best=False, epoch=epoch)
+                logger.info(f"Checkpoint has been saved at epoch {epoch}")
         # Check early stop training
         if configs.earlystop_patience is not None:
             earlystop_count = 0 if is_best else (earlystop_count + 1)

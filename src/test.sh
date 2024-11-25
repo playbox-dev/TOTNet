@@ -5,17 +5,17 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_motion_tennis(5)' \
-  --model_choice 'motion'  \
+  --saved_fn 'normal_tracking_288_512_tracknetv2_tennis(7)' \
+  --model_choice 'tracknetv2'  \
   --gpu_idx 0   \
   --batch_size 8   \
   --img_size 288 512    \
-  --num_frames 3  \
+  --num_frames 7  \
   --interval 1   \
   --occluded_prob 0 \
   --dataset_choice 'tennis' \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_tennis(5)/normal_tracking_288_512_motion_tennis(5)_epoch_6.pth' \
+  --pretrained_path '../checkpoints/normal_tracking_288_512_tracknetv2_tennis(7)/normal_tracking_288_512_tracknetv2_tennis(7)_best.pth' \
 
 
 # deformable 

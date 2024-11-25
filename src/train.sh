@@ -29,9 +29,9 @@
 
 # torchrun --nproc_per_node=2 main.py     \
 #     --num_epochs 30   \
-#     --saved_fn 'normal_tracking_288_512_tracknetv2_tennis'   \
+#     --saved_fn 'normal_tracking_288_512_tracknetv2_tennis(5)'   \
 #     --interval 1   \
-#     --num_frames 3  \
+#     --num_frames 5  \
 #     --lr 1e-3 \
 #     --weight_decay 1e-5 \
 #     --img_size 288 512 \
@@ -48,9 +48,10 @@
 #     --no_test   \
 #     --val-size 0.2 \
 
+
 torchrun --nproc_per_node=2 main.py     \
     --num_epochs 20   \
-    --saved_fn 'normal_tracking_288_512_motion_tennis(5)'   \
+    --saved_fn 'normal_tracking_288_512_motion_tennis_frame_5(2)'   \
     --interval 1   \
     --num_frames 5  \
     --optimizer_type adamw  \
