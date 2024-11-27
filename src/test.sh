@@ -2,20 +2,22 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=August
+#SBATCH -w legolas
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_tracknetv2_tennis(7)' \
-  --model_choice 'tracknetv2'  \
+  --saved_fn 'normal_tracking_288_512_motion_tt_events(5)_stage1' \
+  --model_choice 'motion'  \
   --gpu_idx 0   \
   --batch_size 8   \
   --img_size 288 512    \
-  --num_frames 7  \
+  --num_frames 5  \
   --interval 1   \
   --occluded_prob 0 \
-  --dataset_choice 'tennis' \
+  --dataset_choice 'tt' \
+  --bidirect \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_tracknetv2_tennis(7)/normal_tracking_288_512_tracknetv2_tennis(7)_best.pth' \
+  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_tt_events(5)_stage1/normal_tracking_288_512_motion_tt_events(5)_stage1_best.pth' \
 
 
 # deformable 

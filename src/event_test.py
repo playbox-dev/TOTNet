@@ -12,14 +12,8 @@ sys.path.append('./')
 
 from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
-# from model.deformable_detection_model import build_detector
-# from model.propose_model import build_detector
-from model.tracknet import build_TrackerNet, build_TrackNetV2
-from model.mamba_model import build_mamba
-from model.two_stream_network import build_two_streams_model
-from model.wasb import build_wasb
-from model.motion_model import build_motion_model
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
+from model.motion_model_v2 import build_motion_model
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics, post_process_event_prediction, PCE, SPCE
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap
 from config.config import parse_configs
@@ -68,16 +62,7 @@ def main_worker(gpu_idx, configs):
     configs.is_master_node = (not configs.distributed) or (
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
-    if configs.model_choice == 'wasb':
-        model = build_wasb(configs)
-    if configs.model_choice == 'tracknetv2':
-        model = build_TrackNetV2(configs)
-    if configs.model_choice == 'mamba':
-        model = build_mamba(configs)
-    if configs.model_choice == 'motion':
-        model = build_motion_model(configs)
-    if configs.model_choice == 'two_stream_model':
-        model = build_two_streams_model(configs)
+    model = build_motion_model(configs)
 
 
     model = make_data_parallel(model, configs)
@@ -100,17 +85,6 @@ def main_worker(gpu_idx, configs):
 
 
 def test(test_loader, model, configs):
-    # Initialize metrics for each visibility category
-    visibility_metrics = { 
-        vis: {
-            "rmse": AverageMeter(f"RMSE_Vis_{vis}", ":6.4f"),
-            "accuracy": AverageMeter(f"Accuracy_Vis_{vis}", "6.4f"),
-            "precision": AverageMeter(f"Precision_Vis_{vis}", "6.4f"),
-            "recall": AverageMeter(f"Recall_Vis_{vis}", "6.4f"),
-            "f1": AverageMeter(f"F1_Vis_{vis}", "6.4f"),
-        } for vis in range(4)  # Assuming visibility levels 0 to 3
-    }
-
     # Overall metrics
     rmse_overall = AverageMeter('RMSE_Overall', ':6.4f')
     accuracy_overall = AverageMeter('Accuracy', '6.4f')
@@ -118,8 +92,8 @@ def test(test_loader, model, configs):
     recall_overall = AverageMeter('Recall', '6.4f')
     f1_overall = AverageMeter('F1', '6.4f')
 
-    x_scale = configs.org_size[1] / configs.img_size[1]
-    y_scale = configs.org_size[0] / configs.img_size[0]
+    pce_overall = AverageMeter('PCE', ':6.4f')
+    spce_overall = AverageMeter('SPCE', ':6.4f')
 
     # calculate fps rate
     total_time = 0
@@ -129,60 +103,46 @@ def test(test_loader, model, configs):
     model.eval()
     start_time = time.perf_counter()  # Start timing
     with torch.no_grad():
-        for batch_idx, (batch_data, (_, labels, visibility, _)) in enumerate(tqdm(test_loader)):
+        for batch_idx, (batch_data, (_, ball_xys, target_events, event_classes)) in enumerate(tqdm(test_loader)):
             print(f'\n===================== batch_idx: {batch_idx} ================================')
             batch_size = batch_data.size(0)
             batch_data = batch_data.to(configs.device)
             num_frames = batch_data.size(1)
-            labels = labels.to(configs.device)
-            visibility = visibility.to(configs.device)
-
-            # Compute output
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
-                # #for tracknet we need to rehsape the data
-                B, N, C, H, W = batch_data.shape
-                # Permute to bring frames and channels together
-                batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
-                # Reshape to combine frames into the channel dimension
-                batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
-
+            ball_xys = ball_xys.to(configs.device)
+            target_events = target_events.to(configs.device)
+            event_classes = event_classes.to(configs.device)
            
-            output_heatmap, _ = model(batch_data.float())
+            output_heatmap, cls_score = model(batch_data.float())
 
-            mse, rmse, _, _ = heatmap_calculate_metrics(output_heatmap, labels)
+            _, rmse, _, _ = heatmap_calculate_metrics(output_heatmap, ball_xys)
             post_processed_coords = extract_coords(output_heatmap)
+
             precision, recall, f1, accuracy = precision_recall_f1_tracknet(
-                post_processed_coords, labels, distance_threshold=configs.ball_size
+                post_processed_coords, ball_xys, distance_threshold=configs.ball_size
             )
+          
 
             # Update metrics for each sample by visibility
             for sample_idx in range(batch_size):
                
-                vis_label = visibility[sample_idx].item()  # Visibility label for this sample
-                label = labels[sample_idx]
+                event_label = event_classes[sample_idx].item()  # Visibility label for this sample
+                target_event_label = target_events[sample_idx]
+                label = ball_xys[sample_idx]
+
                 pred_coords = post_processed_coords[sample_idx]
+                pred_target = cls_score[sample_idx]
+
                 x_pred, y_pred = pred_coords[0], pred_coords[1]
 
+                # Compute RMSE for this sample
                 sample_rmse = calculate_rmse(label[0], label[1], x_pred, y_pred)
 
-                # Check if prediction is within threshold for accuracy
-                dist = torch.sqrt((pred_coords[0] - label[0])**2 + (pred_coords[1] - label[1])**2)
-                within_threshold = dist <= configs.ball_size
-                sample_accuracy = 1 if within_threshold else 0
+                pce, spce = PCE(pred_target, target_event_label), SPCE(pred_target, target_event_label)
+                pce_overall.update(pce)
+                spce_overall.update(spce)
 
-                # Calculate precision and recall for this sample
-                # Assuming you have functions for individual precision and recall
-                sample_precision = precision if within_threshold else 0
-                sample_recall = recall if within_threshold else 0
-                sample_f1 = f1 if within_threshold else 0
-
-                # Update visibility-specific metrics
-                visibility_metrics[vis_label]["rmse"].update(sample_rmse)
-                visibility_metrics[vis_label]["accuracy"].update(sample_accuracy)
-                visibility_metrics[vis_label]["precision"].update(sample_precision)
-                visibility_metrics[vis_label]["recall"].update(sample_recall)
-                visibility_metrics[vis_label]["f1"].update(sample_f1)
-                print(f"""Visibility {vis_label} - Ball Detection - Overall: (x, y) - org: ({label[0].item()}, {label[1].item()}), prediction = ({x_pred.item()}, {y_pred.item()}, rmse is {sample_rmse:.4f})""")
+                print('Real Event {}, Predict Event {} - Ball Detection - \t Overall: \t (x, y) - org: ({}, {}), prediction = ({}, {}), rmse is {}'.format(
+                        target_event_label, pred_target, label[0].item(), label[1].item(), x_pred.item(), y_pred.item(), sample_rmse))
 
 
             # Update overall metrics
@@ -192,6 +152,7 @@ def test(test_loader, model, configs):
             recall_overall.update(recall)
             f1_overall.update(f1)
 
+
     end_time = time.perf_counter()  # End timing
 
     total_time += end_time - start_time  # Accumulate time
@@ -200,18 +161,12 @@ def test(test_loader, model, configs):
     fps = total_frames / total_time if total_time > 0 else 0
 
     # Print results for each visibility category
-    print("===== Visibility-Specific Results =====")
-    for vis_label, metrics in visibility_metrics.items():
-        print(
-            f"Visibility {vis_label}: RMSE: {metrics['rmse'].avg:.4f}, "
-            f"Accuracy: {metrics['accuracy'].avg:.4f}, Precision: {metrics['precision'].avg:.4f}, "
-            f"Recall: {metrics['recall'].avg:.4f}, F1: {metrics['f1'].avg:.4f}"
-        )
-    
+    print("===== Specific Results =====")
     # Print overall results
     print(
         f"Overall Results: RMSE: {rmse_overall.avg:.4f}, Accuracy: {accuracy_overall.avg:.4f}, \n"
         f"Precision: {precision_overall.avg:.4f}, Recall: {recall_overall.avg:.4f}, F1: {f1_overall.avg:.4f}, \n"
+        f"PCE: {pce_overall.avg:.4f}, SPCE: {spce_overall.avg:.4f}\n"
         f"Model fps rate: {fps:.0f}"
     )
 

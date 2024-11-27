@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.append('../')
 
-from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset
-from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis
+from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset, Event_Dataset
+from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis, get_events_infor_noseg
 from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask, RandomColorJitter
 
 
@@ -214,15 +214,15 @@ def create_normal_test_dataloader(configs):
     return test_dataloader
 
 
-def create_occlusion_train_val_dataloader(configs, subset_size=None):
+def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_prob=1.0):
     """Create dataloader for training and validation, with an option to use a subset of the data."""
 
     train_transform = Compose([
         RandomColorJitter(p=0.25),
         Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
         Random_Crop(max_reduction_percent=0.2, p=0.25),
-        Resize(new_size=configs.img_size, p=1.0),
-        Normalize(num_frames_sequence=configs.num_frames, p=1.0),
+        Resize(new_size=configs.img_size, p=necessary_prob),
+        Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
     ], p=1.)
 
     
@@ -231,8 +231,12 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
 
     if configs.dataset_choice == 'tt':
         # Create train dataset
-        train_dataset = Occlusion_Dataset(train_events_infor, train_events_label, transform=train_transform,
+        if configs.event:
+            train_dataset = Event_Dataset(train_events_infor, train_events_label, transform=train_transform,
                                     num_samples=configs.num_samples)
+        else:
+            train_dataset = Occlusion_Dataset(train_events_infor, train_events_label, transform=train_transform,
+                                        num_samples=configs.num_samples)
     else:
         train_dataset = Tennis_Dataset(train_events_infor, train_events_label, transform=train_transform,
                                     num_samples=configs.num_samples)
@@ -255,14 +259,17 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None):
     val_dataloader = None
     if not configs.no_val:
         val_transform = Compose([
-            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
-            Resize(new_size=configs.img_size, p=1.0),
-            Normalize(num_frames_sequence=configs.num_frames, p=1.0),
+            Resize(new_size=configs.img_size, p=necessary_prob),
+            Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
         ], p=1.)
 
         if configs.dataset_choice == 'tt':
-            val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
-                                        num_samples=configs.num_samples)
+            if configs.event:
+                val_dataset = Event_Dataset(val_events_infor, val_events_label, transform=val_transform,
+                                            num_samples=configs.num_samples)
+            else:
+                val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
+                                            num_samples=configs.num_samples)
         else:
             val_dataset = Tennis_Dataset(val_events_infor, val_events_label, transform=val_transform,
                                         num_samples=configs.num_samples)
@@ -286,15 +293,19 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
     """Create dataloader for testing phase"""
 
     test_transform = Compose([
-            Random_Ball_Mask(mask_size=(configs.img_size[0]//20,configs.img_size[0]//20), p=configs.occluded_prob),
             Resize(new_size=configs.img_size, p=1.0),
             Normalize(num_frames_sequence=configs.num_frames, p=1.0),
         ], p=1.)
     dataset_type = 'test'
     if configs.dataset_choice == 'tt':
-        test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
-        test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+        if configs.event:
+            test_events_infor, test_events_labels = get_events_infor_noseg(configs.test_game_list, configs, dataset_type)
+            test_dataset = Event_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
+        else:
+            test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
+            test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                    num_samples=configs.num_samples)
     else:
         test_events_infor, test_events_labels = get_all_detection_infor_tennis(configs.tennis_test_game_list, configs)
         test_dataset = Tennis_Dataset(test_events_infor, test_events_labels, transform=test_transform,
@@ -356,29 +367,37 @@ if __name__ == '__main__':
     configs.batch_size = 1
     configs.img_size = (288, 512)
     configs.interval = 1
-    configs.num_frames = 9
+    configs.num_frames = 5
     configs.occluded_prob = 0
-    configs.dataset_choice = 'tt'
 
-    # Adjust ball position
-    w_ratio = 1920. / configs.img_size[1] # New width divided by original width
-    h_ratio = 1080. / configs.img_size[0] # New height divided by original height
-    print(f"w ration is {w_ratio}, h_ratio is {h_ratio}")
+    configs.dataset_choice = 'tt'
+    configs.event = True
+    # configs.smooth_labelling = True
+
 
     # Create Masked dataloaders 
-    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
+    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs, necessary_prob=0)
     print('len train_dataloader: {}, val_dataloader: {}'.format(len(train_dataloader), len(val_dataloader)))
     
     test_dataloader = create_occlusion_test_dataloader(configs, configs.num_samples)
     print(f"len test_loader {len(test_dataloader)}")
 
-    batch_data, (masked_frameids, labels, visability, status) = next(iter(train_dataloader))
+    frame_id = configs.num_frames-1
+
+    if configs.event == False:
+        batch_data, (masked_frameids, ball_xys, visability, status) = next(iter(train_dataloader))
+    else:
+        batch_data, (masked_frameids, ball_xys, target_events, event_classes) = next(iter(train_dataloader))
+    
+    if configs.event or configs.bidirect:
+        frame_id = configs.num_frames//2
     # print(f"unique number of batch_data is {torch.unique(batch_data)}")
     # Check the shapes
+    print(f'ball frame is {frame_id}, print event is {event_classes}')
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
-    print(f'Batch labels shape: {labels.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
-    print(torch.unique(labels))
-    print(masked_frameids, labels, torch.round(labels[0][0]*h_ratio), torch.round(labels[0][1]*w_ratio))
+    print(f'Batch ball_xy shape: {ball_xys.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
+    print(torch.unique(ball_xys))
+   
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]
 
@@ -397,8 +416,8 @@ if __name__ == '__main__':
     # Loop over each sample in the batch
     for batch_index in range(batch_data.shape[0]):
         sample_data = batch_data[batch_index]  # Shape: [N, C, H, W]
-        masked_image = sample_data[configs.num_frames-1]  # Shape: [C, H, W]
-        ball_xy = labels[batch_index].cpu().numpy()  # Ball coordinates for this sample, as a list
+        masked_image = sample_data[frame_id]  # Shape: [C, H, W]
+        ball_xy = ball_xys[batch_index].cpu().numpy()  # Ball coordinates for this sample, as a list
 
         # Collect all frames (original and masked) for visualization
         frame_images = []
@@ -410,7 +429,7 @@ if __name__ == '__main__':
 
         # Add the masked frame with ball position
         masked_frame = np.transpose(masked_image.cpu().numpy(), (1, 2, 0))  # Convert to [H, W, C]
-        img_with_ball = cv2.circle(masked_frame.copy(), tuple(ball_xy), radius=5, color=(255, 0, 0), thickness=2)
+        img_with_ball = cv2.circle(masked_frame.copy(), tuple(ball_xy), radius=10, color=(0, 0, 255), thickness=3)
         # img_with_ball = cv2.cvtColor(img_with_ball, cv2.COLOR_RGBR)  # Convert to BGR for saving
         frame_images.append(img_with_ball)  # Add the masked frame to the list
 

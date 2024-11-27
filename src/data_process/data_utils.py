@@ -160,6 +160,73 @@ def get_events_infor(game_list, configs, dataset_type):
     return events_infor, events_labels
 
 
+
+def get_events_infor_noseg(game_list, configs, dataset_type):
+    """Get information of sequences of images based on events
+
+    :param game_list: List of games (video names)
+    :return:
+    [
+        each event: [[img_path_list], ball_position, target_events, segmentation_path]
+    ]
+    """
+    # the paper mentioned 25, but used 9 frames only
+    num_frames_from_event = int((configs.num_frames - 1) / 2)
+
+    annos_dir = os.path.join(configs.dataset_dir, dataset_type, 'annotations')
+    images_dir = os.path.join(configs.dataset_dir, dataset_type, 'images')
+    events_infor = []
+    events_labels = []
+    for game_name in game_list:
+        ball_annos_path = os.path.join(annos_dir, game_name, 'ball_markup.json')
+        events_annos_path = os.path.join(annos_dir, game_name, 'events_markup.json')
+        # Load ball annotations
+        json_ball = open(ball_annos_path)
+        ball_annos = json.load(json_ball)
+
+        # Load events annotations
+        json_events = open(events_annos_path)
+        events_annos = json.load(json_events)
+        for event_frameidx, event_name in events_annos.items():
+            event_frameidx = int(event_frameidx)
+            smooth_frame_indices = [event_frameidx]  # By default
+
+            # smooth labeling 
+            if (event_name != 'empty_event') and (configs.smooth_labelling):
+                smooth_frame_indices = [idx for idx in range(event_frameidx - num_frames_from_event,
+                                                             event_frameidx + num_frames_from_event + 1)]
+
+            for smooth_idx in smooth_frame_indices:
+                sub_smooth_frame_indices = [idx for idx in range(smooth_idx - num_frames_from_event,
+                                                                 smooth_idx + num_frames_from_event + 1)]
+                img_path_list = []
+                for sub_smooth_idx in sub_smooth_frame_indices:
+                    img_path = os.path.join(images_dir, game_name, 'img_{:06d}.jpg'.format(sub_smooth_idx))
+                    img_path_list.append(img_path)
+
+               
+                # Get ball position for the last frame in the sequence
+                if '{}'.format(smooth_idx) not in ball_annos.keys():
+                    # print('smooth_idx: {} - no ball position for the frame idx {}'.format(smooth_idx, smooth_idx))
+                    continue
+                ball_position_xy = ball_annos['{}'.format(smooth_idx)]
+                ball_position_xy = np.array([ball_position_xy['x'], ball_position_xy['y']], dtype=int)
+                # Ignore the event without ball information
+                if (ball_position_xy[0] < 0) or (ball_position_xy[1] < 0):
+                    continue
+
+                event_class = configs.events_dict[event_name]
+
+                target_events = smooth_event_labelling(event_class, smooth_idx, event_frameidx)
+                events_infor.append(img_path_list)
+                # Re-label if the event is neither bounce nor net hit
+                if (target_events[0] == 0) and (target_events[1] == 0):
+                    event_class = 2
+                events_labels.append([ball_position_xy, target_events, event_class])
+
+    return events_infor, events_labels
+
+
 def get_all_detection_infor_bidirect(game_list, configs, dataset_type):
     num_frames_from_event = (configs.num_frames - 1) // 2
     interval = configs.interval  # Get interval value from configs
@@ -265,11 +332,17 @@ def get_all_detection_infor(game_list, configs, dataset_type):
         for ball_frameidx, ball_location in ball_annos.items():
             ball_frameidx = int(ball_frameidx)
 
-            # Create frame indices with the correct interval, with the key frame as the last frame
-            sub_ball_frame_indices = [
-                ball_frameidx - (num_frames - i) # Adjust to start from earlier frames
-                for i in range(num_frames + 1)
-            ]
+            if configs.bidirect:
+                middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                sub_ball_frame_indices = [
+                    ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                    for i in range(num_frames + 1)
+                ]
+            else:
+                sub_ball_frame_indices = [
+                    ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                    for i in range(num_frames + 1)
+                ]
 
             img_path_list = []
             for idx in sub_ball_frame_indices:
@@ -369,7 +442,10 @@ def train_val_data_separation(configs):
     """Seperate data to training and validation sets"""
     if configs.dataset_choice == 'tt':
         dataset_type = 'training'
-        events_infor, events_labels = get_all_detection_infor(configs.train_game_list, configs, dataset_type)
+        if configs.event == True:
+            events_infor, events_labels = get_events_infor_noseg(configs.train_game_list, configs, dataset_type)
+        else:
+            events_infor, events_labels = get_all_detection_infor(configs.train_game_list, configs, dataset_type)
 
         if configs.no_val:
             train_events_infor = events_infor
@@ -408,18 +484,21 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tennis'
+    configs.dataset_choice ='tt'
+    # configs.event = True
+    configs.bidirect = True
     train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
 
     dataset_type = 'test'
-    test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
+    if configs.event:
+        test_events_infor, test_events_labels = get_events_infor_noseg(configs.test_game_list, configs, dataset_type)
+    else:
+        test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
     
-    print(train_events_infor[28])
-    print(train_events_labels[28])
-    # Initialize counters
-    contains_negative_one = 0
-    does_not_contain_negative_one = 0
+    print(len(test_events_infor))
+    print(train_events_infor[30])
+    print(train_events_labels[30])
 
     # for i, labels in enumerate(test_events_labels):
     #     # Calculate the middle frame index

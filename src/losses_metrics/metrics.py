@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def extract_coords(pred_heatmap):
@@ -303,8 +304,8 @@ def classification_metrics(preds, labels, num_classes=4):
     Calculate accuracy, precision, recall, and F1-score for classification.
 
     Args:
-        preds (torch.Tensor): Predictions of shape [B, 4] (logits or probabilities).
-        labels (torch.Tensor): Ground truth of shape [B, 1].
+        preds (torch.Tensor): Predictions of shape [B, 3] (logits or probabilities).
+        labels (torch.Tensor): Ground truth of shape [B].
         num_classes (int): Number of classes.
 
     Returns:
@@ -312,7 +313,7 @@ def classification_metrics(preds, labels, num_classes=4):
     """
     # Get predicted classes
     _, predicted_classes = torch.max(preds, dim=1)  # [B]
-    labels = labels.view(-1)  # Flatten labels to [B]
+    labels = labels.squeeze(-1) if labels.dim() > 1 else labels  # [B]
 
     # Calculate accuracy
     correct = (predicted_classes == labels).sum().item()
@@ -345,3 +346,92 @@ def classification_metrics(preds, labels, num_classes=4):
         "recall": macro_recall,
         "f1_score": macro_f1
     }
+
+
+def post_process_event_prediction(preds):
+    _, predicted_classes = torch.max(preds, dim=1)  # [B]
+
+    return predicted_classes
+
+
+
+def PCE(sample_prediction_events, sample_target_events):
+    """
+    Percentage of Correct Events for PyTorch tensors.
+
+    :param sample_prediction_events: Predicted events, tensor of shape [2,]
+    :param sample_target_events: Ground truth events, tensor of shape [2,]
+    :return: Integer (1 for correct, 0 for incorrect)
+    """
+    # Threshold predictions and targets
+    sample_prediction_events = (sample_prediction_events >= 0.5).float()
+    sample_target_events = (sample_target_events >= 0.5).float()
+    
+    # Compute the difference
+    diff = sample_prediction_events - sample_target_events
+    
+    # Check if all values are correct
+    if torch.sum(diff) != 0:  # Incorrect
+        ret_pce = 0
+    else:  # Correct
+        ret_pce = 1
+    return ret_pce
+
+
+def SPCE(sample_prediction_events, sample_target_events, thresh=0.25):
+    """
+    Smooth Percentage of Correct Events for PyTorch tensors.
+
+    :param sample_prediction_events: Predicted events, tensor of shape [2,]
+    :param sample_target_events: Ground truth events, tensor of shape [2,]
+    :param thresh: Threshold for the difference between prediction and ground truth
+    :return: Integer (1 for correct, 0 for incorrect)
+    """
+    # Compute the absolute difference
+    diff = torch.abs(sample_prediction_events - sample_target_events)
+    
+    # Check if all differences are within the threshold
+    if torch.sum(diff > thresh) > 0:  # Incorrect
+        ret_spce = 0
+    else:  # Correct
+        ret_spce = 1
+    return ret_spce
+
+
+def batch_PCE(batch_prediction_events, batch_target_events):
+    """
+    Batch Percentage of Correct Events (PCE) using PyTorch tensors.
+    
+    :param batch_prediction_events: Batch of predictions, size: (B, N)
+    :param batch_target_events: Batch of ground truths, size: (B, N)
+    :return: Tensor of PCE values for each sample in the batch, size: (B,)
+    """
+    # Threshold predictions and targets
+    batch_prediction_events = (batch_prediction_events >= 0.5).float()
+    batch_target_events = (batch_target_events >= 0.5).float()
+    
+    # Compute difference
+    diff = batch_prediction_events - batch_target_events  # Shape: (B, N)
+    
+    # Check correctness for each sample
+    batch_pce = (diff.abs().sum(dim=1) == 0).float()  # 1 if correct, 0 if incorrect
+    
+    return batch_pce.mean()
+
+
+def batch_SPCE(batch_prediction_events, batch_target_events, thresh=0.25):
+    """
+    Batch Smooth Percentage of Correct Events (SPCE) using PyTorch tensors.
+    
+    :param batch_prediction_events: Batch of predictions, size: (B, N)
+    :param batch_target_events: Batch of ground truths, size: (B, N)
+    :param thresh: Threshold for the difference between prediction and ground truth.
+    :return: Tensor of SPCE values for each sample in the batch, size: (B,)
+    """
+    # Compute absolute difference
+    diff = torch.abs(batch_prediction_events - batch_target_events)  # Shape: (B, N)
+    
+    # Check if all differences are within the threshold for each sample
+    batch_spce = (diff <= thresh).all(dim=1).float()  # 1 if all within threshold, 0 otherwise
+    
+    return batch_spce.mean()

@@ -111,6 +111,12 @@ def parse_configs():
                         help='ball size to determine percision recall and f1 socre')
     parser.add_argument('--dataset_choice', type=str, default='tt', metavar='DC',
                         help='which dataset to use tt for table tennis, tennis for tennis')
+    parser.add_argument('--event', action='store_true',
+                        help='If true, use event dataset, which is only available in tt dataset! ')
+    parser.add_argument('--bidirect', action='store_true',
+                        help='If true, ball frame will be middle not last, if false will be last')
+    parser.add_argument('--smooth_labelling', action='store_true',
+                        help='If true, smooth labelling is true')
     parser.add_argument(
         '--img_size', 
         type=int, 
@@ -164,6 +170,7 @@ def parse_configs():
     ####################################################################
 
     # configs.dataset_dir = os.path.join(configs.working_dir, 'dataset')
+
     configs.dataset_dir = os.path.join('/home/s224705071/github/TT/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/', 'dataset')
     configs.train_game_list = ['game_1', 'game_2', 'game_3', 'game_4', 'game_5']
     configs.test_game_list = ['test_1', 'test_2', 'test_3', 'test_4', 'test_5', 'test_6', 'test_7']

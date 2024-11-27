@@ -77,7 +77,10 @@ def load_pretrained_model(model, pretrained_path, gpu_idx):
         model_state_dict = model.module.state_dict()
         
         # 1. filter out unnecessary keys
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_state_dict}
+        pretrained_dict = {k: v for k, v in pretrained_dict.items() 
+                           if k in model_state_dict}
+        # pretrained_dict = {k: v for k, v in pretrained_dict.items() 
+        #                    if k in model_state_dict and not k.startswith("class_head")}
         # 2. overwrite entries in the existing state dict
         model_state_dict.update(pretrained_dict)
         # 3. load the new state dict
@@ -85,7 +88,10 @@ def load_pretrained_model(model, pretrained_path, gpu_idx):
     else:
         model_state_dict = model.state_dict()
         # 1. filter out unnecessary keys
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_state_dict}
+        pretrained_dict = {k: v for k, v in pretrained_dict.items()
+                           if k in model_state_dict}
+        # pretrained_dict = {k: v for k, v in pretrained_dict.items() 
+        #                 if k in model_state_dict and not k.startswith("class_head")}
         # 2. overwrite entries in the existing state dict
         model_state_dict.update(pretrained_dict)
         # 3. load the new state dict

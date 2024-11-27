@@ -150,26 +150,86 @@ class HeatmapBallDetectionLoss(nn.Module):
         return total_loss_x + total_loss_y
 
 
-
-def focal_loss(pred_logits, labels, alpha=1.0, gamma=2.0):
-    """_summary_
+def events_spotting_loss(pred_events, target_events, weights=(1, 3), epsilon=1e-9):
+    """
+    Weighted binary cross-entropy loss for event spotting.
 
     Args:
-        pred_logits (tensor): _description_
-        labels (_type_): _description_
-        alpha (float, optional): _description_. Defaults to 1.0.
-        gamma (float, optional): _description_. Defaults to 2.0.
+        pred_events (torch.Tensor): Predicted probabilities, shape [B, num_events].
+        target_events (torch.Tensor): Ground truth labels, shape [B, num_events].
+        weights (tuple): Weights for the event classes, e.g., (1, 3).
+        epsilon (float): Small constant for numerical stability.
 
     Returns:
-        _type_: _description_
+        torch.Tensor: Loss value (scalar).
+    """
+    # Convert weights to a tensor and normalize
+    weights = torch.tensor(weights, dtype=torch.float32).view(1, -1)
+    weights = weights / weights.sum()
+    
+    # Move weights to the same device as predictions
+    weights = weights.to(pred_events.device)
+    
+    # Compute the weighted binary cross-entropy loss
+    loss = -torch.mean(
+        weights * (
+            target_events * torch.log(pred_events + epsilon) +
+            (1.0 - target_events) * torch.log(1.0 - pred_events + epsilon)
+        )
+    )
+    
+    return loss
+
+
+
+# Example usage
+def probability_loss(pred_probs, true_probs):
+    """
+    Compute KL Divergence Loss.
+    Args:
+        pred_probs: Model output probabilities (after softmax) [B, C]
+        true_probs: Ground truth probabilities [B, C]
+    Returns:
+        KL divergence loss.
+    """
+    pred_probs = pred_probs + 1e-12
+    return F.kl_div(pred_probs.log(), true_probs, reduction='batchmean')
+
+
+
+def focal_loss(pred_logits, labels, alpha=1.0, gamma=2.0, num_classes=3):
+    """
+    Focal loss for classification tasks.
+
+    Args:
+        pred_logits (tensor): Logits in shape [B, num_classes].
+        labels (tensor): Ground truth labels in shape [B].
+        alpha (float, optional): Balancing factor for the loss. Defaults to 1.0.
+        gamma (float, optional): Focusing parameter to down-weight easy examples. Defaults to 2.0.
+        num_classes (int): Number of classes in the classification task.
+
+    Returns:
+        torch.Tensor: Scalar loss value (mean over the batch).
     """
     # Convert logits to probabilities
-    pred_probs = F.softmax(pred_logits, dim=-1)  # [B, 4]
-    labels_one_hot = F.one_hot(labels.squeeze(-1).long(), num_classes=4)  # [B, 4]
+    pred_probs = F.softmax(pred_logits, dim=-1)  # [B, num_classes]
+    
+    # Ensure labels are 1D
+    labels = labels.squeeze(-1) if labels.dim() > 1 else labels  # [B]
+    
+    # One-hot encode the labels
+    labels_one_hot = F.one_hot(labels.long(), num_classes=num_classes).float()  # [B, num_classes]
+    
+    # Compute probabilities of true classes
+    pt = (pred_probs * labels_one_hot).sum(dim=1)  # [B]
+    
+    # Clamp pt for numerical stability
+    pt = torch.clamp(pt, min=1e-7, max=1.0)  # Avoid log(0)
     
     # Compute focal loss
-    pt = (pred_probs * labels_one_hot).sum(dim=1)  # Probabilities of true classes
-    loss = -alpha * (1 - pt) ** gamma * torch.log(pt + 1e-12)
+    loss = -alpha * (1 - pt) ** gamma * torch.log(pt)
+    
+    # Return mean loss over the batch
     return loss.mean()
 
 def calculate_rmse_from_heatmap(output, labels, scale=None):

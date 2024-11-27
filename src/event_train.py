@@ -8,17 +8,11 @@ import torch.distributed as dist
 
 from collections import Counter
 from tqdm import tqdm
-# from model.deformable_detection_model import build_detector
-# from model.propose_model import build_detector
-from model.tracknet import build_TrackerNet, build_TrackNetV2
-from model.wasb import build_wasb
-from model.motion_model import build_motion_model, post_process
-from model.mamba_model import build_mamba
-from model.two_stream_network import build_two_streams_model
-from model.model_utils import make_data_parallel, get_num_parameters
-from losses_metrics.losses import Heatmap_Ball_Detection_Loss, focal_loss
-from losses_metrics.metrics import heatmap_calculate_metrics, precision_recall_f1_tracknet, extract_coords, classification_metrics
-from losses_metrics.physics_loss import PhysicsLoss
+
+from model.motion_model_v2 import build_motion_model
+from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss, events_spotting_loss
+from losses_metrics.metrics import heatmap_calculate_metrics, precision_recall_f1_tracknet, extract_coords, batch_PCE, batch_SPCE
 from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float, print_nvidia_driver_version
@@ -96,16 +90,7 @@ def main_worker(configs):
         logger = None
         tb_writer = None
     
-    if configs.model_choice == 'wasb':
-        model = build_wasb(configs)
-    if configs.model_choice == 'tracknetv2':
-        model = build_TrackNetV2(configs)
-    if configs.model_choice == 'mamba':
-        model = build_mamba(configs)
-    if configs.model_choice == 'motion':
-        model = build_motion_model(configs)
-    if configs.model_choice == 'two_stream_model':
-        model = build_two_streams_model(configs)
+    model = build_motion_model(configs)
 
     model = make_data_parallel(model, configs)
 
@@ -115,6 +100,22 @@ def main_worker(configs):
     best_val_loss = np.inf
     earlystop_count = 0
     is_best = False
+
+
+    # optionally load weight from a checkpoint
+    if configs.pretrained_path is not None:
+        before_params = {name: param.clone() for name, param in model.named_parameters()}
+        model = load_pretrained_model(model, configs.pretrained_path, configs.gpu_idx)
+        if logger is not None:
+            logger.info('loaded pretrained model at {}'.format(configs.pretrained_path))
+        # Compare parameters after loading
+        for name, param in model.named_parameters():
+            if not torch.equal(before_params[name], param):
+                # print(f"Layer {name} successfully updated.")
+                # param.requires_grad = False  # Freeze layer
+                continue
+            else:
+                print(f"Layer {name} was NOT updated.")
 
     loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
 
@@ -128,26 +129,6 @@ def main_worker(configs):
     
     train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
 
-    # train_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in train_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     train_visibility_counts.update( visibility)
-    
-    # val_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in val_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     val_visibility_counts.update( visibility)
-
-    # print(f"Train visibility counter {train_visibility_counts}, Val visibility counter {val_visibility_counts}")
-
-    # test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
-    # test_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in test_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     test_visibility_counts.update( visibility)
-    # print(f"test visibility counter {test_visibility_counts}")
-
-    # exit()
 
     test_loader = None
     if configs.no_test == False:
@@ -255,37 +236,23 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
     model.train()
     start_time = time.time()
     
-    for batch_idx, (batch_data, (_, labels, visibiltity, status)) in enumerate(tqdm(train_loader)):
+    for batch_idx, (batch_data, (_, ball_xys, target_events, event_classes)) in enumerate(tqdm(train_loader)):
         data_time.update(time.time() - start_time)
 
         batch_size = batch_data.size(0)
         batch_data = batch_data.to(configs.device, dtype=torch.float)
-        labels = labels.to(configs.device, dtype=torch.float)
-        visibiltity = visibiltity.to(configs.device)
-
-        if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
-            # #for tracknet we need to rehsape the data
-            B, N, C, H, W = batch_data.shape
-            # Permute to bring frames and channels together
-            batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
-            # Reshape to combine frames into the channel dimension
-            batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
-
+        ball_xys = ball_xys.to(configs.device, dtype=torch.float)
+        target_events = target_events.to(configs.device)
+        event_classes = event_classes.to(configs.device)
 
         with torch.autocast(device_type='cuda'):
             output_heatmap, cls_score = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap
-            if torch.isnan(output_heatmap[0]).any() or torch.isnan(output_heatmap[1]).any():
-                if logger is not None:
-                    logger.info("nan appeard here")
-                output_heatmap = [
-                    torch.nan_to_num(output_heatmap[0]),
-                    torch.nan_to_num(output_heatmap[1]),
-                ]
         if cls_score == None:
-            cls_loss = torch.tensor(1e-8, device=configs.device)
+            cls_loss = torch.tensor(1e-9, device=configs.device)
         else:
-            cls_loss = focal_loss(cls_score, visibiltity) * 0.1
-        heatmap_loss = loss_func(output_heatmap, labels)
+            cls_loss = events_spotting_loss(cls_score, target_events)
+  
+        heatmap_loss = loss_func(output_heatmap, ball_xys)
         total_loss = heatmap_loss + cls_loss
 
 
@@ -308,9 +275,11 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
             reduced_heatmap_loss = heatmap_loss
             reduced_loss = total_loss
             reduced_cls_loss = cls_loss
+
         losses.update(to_python_float(reduced_loss), batch_size)
         heatmap_losses.update(to_python_float(reduced_heatmap_loss), batch_size)
         cls_losses.update(to_python_float(reduced_cls_loss), batch_size)
+
         # measure elapsed time
         torch.cuda.synchronize()
         batch_time.update(time.time() - start_time)
@@ -335,72 +304,50 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
     recall_overall = AverageMeter('Recall', ':6.4f')
     f1_overall = AverageMeter('F1', ':6.4f')
 
-    cls_accuracy_overall = AverageMeter('Cls Accuracy', ':6.4f')
-    cls_precision_overall = AverageMeter('Cls Precision', ':6.4f')
-    cls_recall_overall = AverageMeter('Cls Recall', ':6.4f')
-    cls_f1_overall = AverageMeter('Cls F1', ':6.4f')
+    pce_overall = AverageMeter('PCE', ':6.4f')
+    spce_overall = AverageMeter('SPCE', ':6.4f')
 
-
-    progress = ProgressMeter(len(val_loader), [batch_time, data_time, losses, heatmap_losses, cls_losses, rmses, accuracy_overall, precision_overall, recall_overall, f1_overall,
-                                               cls_accuracy_overall, cls_precision_overall, cls_recall_overall, cls_f1_overall],
+    progress = ProgressMeter(len(val_loader), [batch_time, data_time, losses, heatmap_losses, 
+                                               cls_losses, rmses, accuracy_overall, precision_overall, recall_overall, f1_overall,
+                                               pce_overall, spce_overall],
                              prefix="Evaluate - Epoch: [{}/{}]".format(epoch, configs.num_epochs))
     # switch to evaluate mode
     model.eval()
     with torch.no_grad():
         start_time = time.time()
-        for batch_idx, (batch_data, (_, labels, visibility, status)) in enumerate(tqdm(val_loader)):
+        for batch_idx, (batch_data, (_, ball_xys, target_events, event_classes)) in enumerate(tqdm(val_loader)):
             data_time.update(time.time() - start_time)
             batch_size = batch_data.size(0)
 
             batch_data = batch_data.to(configs.device, dtype=torch.float)
-            labels = labels.to(configs.device, dtype=torch.float)
-            visibility = visibility.to(configs.device)
-
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
-                # #for tracknet we need to rehsape the data
-                B, N, C, H, W = batch_data.shape
-                # Permute to bring frames and channels together
-                batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
-                # Reshape to combine frames into the channel dimension
-                batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
+            ball_xys = ball_xys.to(configs.device, dtype=torch.float)
+            target_events = target_events.to(configs.device)
+            event_classes = event_classes.to(configs.device)
 
             with torch.autocast(device_type='cuda'):
                 output_heatmap, cls_score = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap, just raw logits
-                if torch.isnan(output_heatmap[0]).any() or torch.isnan(output_heatmap[1]).any():
-                    if logger is not None:
-                        logger.info("nan appeard here")
-                    output_heatmap = [
-                        torch.nan_to_num(output_heatmap[0]),
-                        torch.nan_to_num(output_heatmap[1]),
-                    ]
 
             if cls_score == None:
-                cls_loss = torch.tensor(1e-8, device=configs.device)
+                cls_loss = torch.tensor(1e-9, device=configs.device)
             else:
-                cls_loss = focal_loss(cls_score, visibility) * 0.1 
-            heatmap_loss = loss_func(output_heatmap, labels)
+                cls_loss = events_spotting_loss(cls_score, target_events)
+            heatmap_loss = loss_func(output_heatmap, ball_xys)
             total_loss = heatmap_loss + cls_loss
 
-            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
+            mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, ball_xys)
             post_processed_coords = extract_coords(output_heatmap)
-            precision, recall, f1, accuracy = precision_recall_f1_tracknet(post_processed_coords, labels, distance_threshold=configs.ball_size)
-            if cls_score == None:
-                cls_accuracy_tensor = torch.tensor(1e-8, device=configs.device)
-                cls_precision_tensor = torch.tensor(1e-8, device=configs.device)
-                cls_recall_tensor = torch.tensor(1e-8, device=configs.device)
-                cls_f1_tensor = torch.tensor(1e-8, device=configs.device)
-            else:
-                cls_dict = classification_metrics(cls_score, visibility)
-                cls_accuracy_tensor = torch.tensor(cls_dict['accuracy'], device=configs.device)
-                cls_precision_tensor = torch.tensor(cls_dict['precision'], device=configs.device)
-                cls_recall_tensor = torch.tensor(cls_dict['recall'], device=configs.device)
-                cls_f1_tensor = torch.tensor(cls_dict['f1_score'], device=configs.device)
+            precision, recall, f1, accuracy = precision_recall_f1_tracknet(post_processed_coords, ball_xys, distance_threshold=configs.ball_size)
+            pce_score, spce_score = batch_PCE(cls_score, target_events), batch_SPCE(cls_score, target_events)
+
 
             rmse_tensor = torch.tensor(rmse).to(configs.device)
             precision_tensor = torch.tensor(precision).to(configs.device)
             recall_tensor = torch.tensor(recall).to(configs.device)
             f1_tensor = torch.tensor(f1).to(configs.device)
             accuracy_tensor = torch.tensor(accuracy).to(configs.device)
+
+            pce_score_tensor = torch.tensor(pce_score).to(configs.device)
+            spce_score_tensor = torch.tensor(spce_score).to(configs.device)
            
 
             # For torch.nn.DataParallel case
@@ -416,10 +363,9 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                 reduced_precision = reduce_tensor(precision_tensor, configs.world_size)
                 reduced_recall = reduce_tensor(recall_tensor, configs.world_size)
                 reduced_f1 = reduce_tensor(f1_tensor, configs.world_size)
-                reduced_cls_accuracy = reduce_tensor(cls_accuracy_tensor, configs.world_size)
-                reduced_cls_precision = reduce_tensor(cls_precision_tensor, configs.world_size)
-                reduced_cls_recall = reduce_tensor(cls_recall_tensor, configs.world_size)
-                reduced_cls_f1 = reduce_tensor(cls_f1_tensor, configs.world_size)
+                reduced_pce = reduce_tensor(pce_score_tensor, configs.world_size)
+                reduced_spce = reduce_tensor(spce_score_tensor, configs.world_size)
+    
                 
             else:
                 reduced_heatmap_loss = heatmap_loss
@@ -430,10 +376,9 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                 reduced_recall = recall
                 reduced_f1 = f1
                 reduced_loss = total_loss
-                reduced_cls_accuracy = cls_accuracy_tensor
-                reduced_cls_precision = cls_precision_tensor
-                reduced_cls_recall = cls_recall_tensor
-                reduced_cls_f1 = cls_f1_tensor
+                reduced_pce = pce_score
+                reduced_spce = spce_score
+            
 
             losses.update(to_python_float(reduced_loss), batch_size)
             heatmap_losses.update(to_python_float(reduced_heatmap_loss), batch_size)
@@ -443,11 +388,10 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             precision_overall.update(to_python_float(reduced_precision), batch_size)
             recall_overall.update(to_python_float(reduced_recall), batch_size)
             f1_overall.update(to_python_float(reduced_f1), batch_size)
+            pce_overall.update(to_python_float(reduced_pce), batch_size)
+            spce_overall.update(to_python_float(reduced_spce), batch_size)
 
-            cls_accuracy_overall.update(to_python_float(reduced_cls_accuracy), batch_size)
-            cls_precision_overall.update(to_python_float(reduced_cls_precision), batch_size)
-            cls_recall_overall.update(to_python_float(reduced_cls_recall), batch_size)
-            cls_f1_overall.update(to_python_float(reduced_cls_f1), batch_size)
+         
 
             # measure elapsed time
             torch.cuda.synchronize()

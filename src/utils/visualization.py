@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 
-def visualize_and_save_2d_heatmap(output_heatmap, save_dir, figsize=(20, 20)):
+def visualize_and_save_2d_heatmap(output_heatmap, save_dir='src/results/visualization', figsize=(20, 20)):
     """
     Visualizes the heatmap output from the model as a 2D heatmap image and saves to a specified directory.
     
@@ -26,13 +26,21 @@ def visualize_and_save_2d_heatmap(output_heatmap, save_dir, figsize=(20, 20)):
         # Create a 2D heatmap by taking the outer product of heatmap_x and heatmap_y
         heatmap_2d = np.outer(heatmap_y, heatmap_x)
 
-        # Plot the 2D heatmap
+        # Get the predicted coordinates (indices of max probability)
+        pred_x_index = np.argmax(heatmap_x)
+        pred_y_index = np.argmax(heatmap_y)
+
+        # Plot the 2D heatmap   
         plt.figure(figsize=figsize)
         plt.imshow(heatmap_2d, cmap='hot', interpolation='nearest')
         plt.colorbar(label='Probability')
         plt.title(f'2D Heatmap Visualization for Sample {i+1}')
         plt.xlabel('Width')
         plt.ylabel('Height')
+
+        # Highlight the predicted point with a red dot
+        plt.scatter(pred_x_index, pred_y_index, color='red', s=200, label='Predicted Coord')
+        plt.legend(loc='upper right')
 
         # Save the figure
         file_path = os.path.join(save_dir, f"heatmap_sample_{i+1}.png")
