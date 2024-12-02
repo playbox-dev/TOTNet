@@ -122,7 +122,7 @@ def parse_configs():
         type=int, 
         nargs=2,  # This makes sure two integers are provided (for width and height)
         metavar=('height', 'wdith'),
-        default=(270, 480),
+        default=(288, 512),
         help="Specify the new image size as width and height (e.g., --img_size 540 960)"
     )
     
@@ -164,6 +164,7 @@ def parse_configs():
     configs.results_dir = os.path.join(configs.working_dir, 'results')
     configs.logs_dir = os.path.join(configs.working_dir, 'logs', configs.saved_fn)
     configs.checkpoints_dir = os.path.join(configs.working_dir, 'checkpoints', configs.saved_fn)
+    configs.frame_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/demo')
 
     ####################################################################
     ##############     Data configs            ###################

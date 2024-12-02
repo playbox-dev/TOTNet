@@ -21,7 +21,7 @@ sys.path.append('../')
 class Video_Loader:
     """The loader for demo with a video input"""
 
-    def __init__(self, video_path, input_size=(320, 128), num_frames_sequence=9):
+    def __init__(self, video_path, input_size=(288, 512), num_frames=5):
         assert os.path.isfile(video_path), "No video at {}".format(video_path)
         self.cap = cv2.VideoCapture(video_path)
         self.video_fps = int(round(self.cap.get(cv2.CAP_PROP_FPS)))
@@ -29,13 +29,13 @@ class Video_Loader:
         self.video_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.video_num_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-        self.width = input_size[0]
-        self.height = input_size[1]
+        self.width = input_size[1]
+        self.height = input_size[0]
         self.count = 0
-        self.num_frames_sequence = num_frames_sequence
+        self.num_frames_sequence = num_frames
         print('Length of the video: {:d} frames'.format(self.video_num_frames))
 
-        self.images_sequence = deque(maxlen=num_frames_sequence)
+        self.images_sequence = deque(maxlen=num_frames)
         self.get_first_images_sequence()
 
     def get_first_images_sequence(self):
@@ -54,16 +54,21 @@ class Video_Loader:
         self.count += 1
         if self.count == len(self):
             raise StopIteration
-        # Read image
 
+        # Read the next frame
         ret, frame = self.cap.read()  # BGR
         assert ret, 'Failed to load frame {:d}'.format(self.count)
-        self.images_sequence.append(cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (self.width, self.height)))
-        resized_imgs = np.dstack(self.images_sequence)  # (128, 320, 27)
-        # Transpose (H, W, C) to (C, H, W) --> fit input of TTNet model
-        resized_imgs = resized_imgs.transpose(2, 0, 1)  # (27, 128, 320)
 
-        return self.count, resized_imgs
+        # Resize and convert to RGB
+        resized_frame = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (self.width, self.height)) #[H, W, C]
+        self.images_sequence.append(resized_frame)
+
+        # Prepare images in [N, C, H, W] format
+        frames_np = np.array(self.images_sequence)  # [N, H, W, C]
+        frames_np = frames_np.transpose(0, 3, 1, 2)  # [N, C, H, W]
+
+        return self.count, frames_np
+
 
     def __len__(self):
         return self.video_num_frames - self.num_frames_sequence + 1  # number of sequences
@@ -79,8 +84,9 @@ if __name__ == '__main__':
     configs.num_frames = 5
 
     video_path = os.path.join(configs.dataset_dir, 'test', 'videos', 'test_1.mp4')
-    video_loader = Video_Loader(video_path, input_size=(480, 270),
-                                      num_frames_sequence=configs.num_frames)
+    print(video_path)
+    video_loader = Video_Loader(video_path, input_size=(512, 288),
+                                      num_frames=configs.num_frames)
     out_images_dir = os.path.join(configs.results_dir, 'debug', 'ttnet_video_loader')
     if not os.path.isdir(out_images_dir):
         os.makedirs(out_images_dir)
@@ -92,6 +98,7 @@ if __name__ == '__main__':
         print('process the sequence index: {}'.format(example_index))
         start_time = time.time()
         count, resized_imgs = video_loader.__next__()
+        print(resized_imgs.shape)
         print('time to load sequence {}: {}'.format(example_index, time.time() - start_time))
 
         resized_imgs = resized_imgs.transpose(1, 2, 0)

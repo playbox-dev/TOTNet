@@ -407,10 +407,17 @@ def get_all_detection_infor_tennis(game_list, configs):
                 ball_frameidx = int(file_name[:4])
 
                 # Create frame indices with the correct interval, with the key frame as the last frame
-                sub_ball_frame_indices = [
-                    ball_frameidx - (num_frames - i) # Adjust to start from earlier frames
-                    for i in range(num_frames + 1)
-                ]
+                if configs.bidirect:
+                    middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                        for i in range(num_frames + 1)
+                    ]
+                else:
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                        for i in range(num_frames + 1)
+                    ]
 
 
                 img_path_list = []
@@ -484,7 +491,7 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tt'
+    configs.dataset_choice ='tennis'
     # configs.event = True
     configs.bidirect = True
     train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)

@@ -2,22 +2,21 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=August
-#SBATCH -w legolas
+#SBATCH -w boromir
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_motion_tt_events(5)_stage1' \
-  --model_choice 'motion'  \
+  --saved_fn 'normal_tracking_288_512_motion_light_opticalflow_tennis(5)' \
+  --model_choice 'motion_light_opticalflow'  \
   --gpu_idx 0   \
   --batch_size 8   \
   --img_size 288 512    \
   --num_frames 5  \
   --interval 1   \
   --occluded_prob 0 \
-  --dataset_choice 'tt' \
-  --bidirect \
+  --dataset_choice 'tennis' \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_tt_events(5)_stage1/normal_tracking_288_512_motion_tt_events(5)_stage1_best.pth' \
+  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_opticalflow_tennis(5)/normal_tracking_288_512_motion_light_opticalflow_tennis(5)_epoch_10.pth' \
 
 
 # deformable 

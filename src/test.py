@@ -19,6 +19,8 @@ from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
 from model.wasb import build_wasb
 from model.motion_model import build_motion_model
+from model.motion_model_light import build_motion_model_light
+from model.motion_model_v3 import build_motion_model_light_opticalflow
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap
@@ -69,15 +71,28 @@ def main_worker(gpu_idx, configs):
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
     if configs.model_choice == 'wasb':
+        print("Building WASB model...")
         model = build_wasb(configs)
-    if configs.model_choice == 'tracknetv2':
+    elif configs.model_choice == 'tracknetv2':
+        print("Building TrackNetV2 model...")
         model = build_TrackNetV2(configs)
-    if configs.model_choice == 'mamba':
+    elif configs.model_choice == 'mamba':
+        print("Building Mamba model...")
         model = build_mamba(configs)
-    if configs.model_choice == 'motion':
+    elif configs.model_choice == 'motion':
+        print("Building Motion model...")
         model = build_motion_model(configs)
-    if configs.model_choice == 'two_stream_model':
+    elif configs.model_choice == 'two_stream_model':
+        print("Building Two Streams model...")
         model = build_two_streams_model(configs)
+    elif configs.model_choice == 'motion_light':
+        print("Building Motion Light model...")
+        model = build_motion_model_light(configs)
+    elif configs.model_choice == 'motion_light_opticalflow':
+        print("Building Motion Light Optical Flow model...")
+        model = build_motion_model_light_opticalflow(configs)
+    else:
+        raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
 
     model = make_data_parallel(model, configs)
@@ -117,9 +132,6 @@ def test(test_loader, model, configs):
     precision_overall = AverageMeter('Precision', '6.4f')
     recall_overall = AverageMeter('Recall', '6.4f')
     f1_overall = AverageMeter('F1', '6.4f')
-
-    x_scale = configs.org_size[1] / configs.img_size[1]
-    y_scale = configs.org_size[0] / configs.img_size[0]
 
     # calculate fps rate
     total_time = 0
@@ -167,7 +179,9 @@ def test(test_loader, model, configs):
 
                 # Check if prediction is within threshold for accuracy
                 dist = torch.sqrt((pred_coords[0] - label[0])**2 + (pred_coords[1] - label[1])**2)
-                within_threshold = dist <= configs.ball_size
+          
+                ball_size = configs.ball_size*2 if vis_label==3 else configs.ball_size
+                within_threshold = dist <= ball_size
                 sample_accuracy = 1 if within_threshold else 0
 
                 # Calculate precision and recall for this sample

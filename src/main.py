@@ -13,6 +13,8 @@ from tqdm import tqdm
 from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
 from model.motion_model import build_motion_model, post_process
+from model.motion_model_light import build_motion_model_light
+from model.motion_model_v3 import build_motion_model_light_opticalflow
 from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
 from model.model_utils import make_data_parallel, get_num_parameters
@@ -97,15 +99,28 @@ def main_worker(configs):
         tb_writer = None
     
     if configs.model_choice == 'wasb':
+        print("Building WASB model...")
         model = build_wasb(configs)
-    if configs.model_choice == 'tracknetv2':
+    elif configs.model_choice == 'tracknetv2':
+        print("Building TrackNetV2 model...")
         model = build_TrackNetV2(configs)
-    if configs.model_choice == 'mamba':
+    elif configs.model_choice == 'mamba':
+        print("Building Mamba model...")
         model = build_mamba(configs)
-    if configs.model_choice == 'motion':
+    elif configs.model_choice == 'motion':
+        print("Building Motion model...")
         model = build_motion_model(configs)
-    if configs.model_choice == 'two_stream_model':
+    elif configs.model_choice == 'two_stream_model':
+        print("Building Two Streams model...")
         model = build_two_streams_model(configs)
+    elif configs.model_choice == 'motion_light':
+        print("Building Motion Light model...")
+        model = build_motion_model_light(configs)
+    elif configs.model_choice == 'motion_light_opticalflow':
+        print("Building Motion Light Optical Flow model...")
+        model = build_motion_model_light_opticalflow(configs)
+    else:
+        raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
     model = make_data_parallel(model, configs)
 
