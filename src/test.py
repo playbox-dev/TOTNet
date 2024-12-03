@@ -23,10 +23,10 @@ from model.motion_model_light import build_motion_model_light
 from model.motion_model_v3 import build_motion_model_light_opticalflow
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
 from utils.misc import AverageMeter
-from utils.visualization import visualize_and_save_2d_heatmap
+from utils.visualization import visualize_and_save_2d_heatmap, save_batch_optical_flow_visualization
 from config.config import parse_configs
 
-
+from model.motion_model_v3 import OpticalFlowMdel
 
 def main():
     configs = parse_configs()
@@ -148,6 +148,7 @@ def test(test_loader, model, configs):
             num_frames = batch_data.size(1)
             labels = labels.to(configs.device)
             visibility = visibility.to(configs.device)
+
 
             # Compute output
             if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':

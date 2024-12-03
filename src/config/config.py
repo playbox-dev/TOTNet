@@ -192,6 +192,11 @@ def parse_configs():
     configs.tennis_train_game_list = ['game1', 'game2', 'game3', 'game4', 'game5', 'game6', 'game7', 'game8']
     configs.tennis_test_game_list = ['game9', 'game10']
 
+
+    configs.badminton_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/badminton/TrackNetV2')
+    configs.badminton_train_game_list = ['Amateur', 'Professional']
+    configs.badminton_test_game_list = ['Test']
+
     make_folder(configs.checkpoints_dir)
     make_folder(configs.logs_dir)
     make_folder(configs.results_dir)

@@ -445,6 +445,78 @@ def get_all_detection_infor_tennis(game_list, configs):
     return events_infor, events_labels
 
 
+def get_all_detection_infor_badminton(level_list, configs):
+    num_frames = configs.num_frames - 1
+
+    dir = os.path.join(configs.badminton_dataset_dir)
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+    for level_name in level_list:
+        level_dir = os.path.join(dir, level_name)
+        games_list = [name for name in os.listdir(level_dir)]
+        for game_name in games_list:
+            game_dir = os.path.join(level_dir, game_name)
+            images_dir = os.path.join(game_dir, 'images')
+            clips_list = [name for name in os.listdir(images_dir)]
+            for clip_name in clips_list:
+                clip_dir = os.path.join(images_dir, clip_name)
+                ball_annos_dir = os.path.join(game_dir, 'csv')
+                
+                file_path = os.path.join(ball_annos_dir, clip_name+'_ball.csv')
+         
+                ball_annos = []
+                # Load ball annotations from CSV
+                with open(file_path, mode='r') as csv_file:
+                    csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+                    for row in csv_reader:
+                        ball_annos.append(row)
+                
+                for row in ball_annos:
+                    frame = row['Frame']  # Assuming `file_name` is a column in the CSV
+                
+                    visibility = int(row['Visibility']) if row['Visibility'] else -1  # Convert visibility to integer
+                    x = int(float(row['X'])) if row['X'] else -1  # Default to -1 if empty Convert x-coordinate to integer
+                    y = int(float(row['Y'])) if row['Y'] else -1  # Default to -1 if empty 
+                    status = -1
+    
+
+                    # Extract the first four characters from file_name and convert to an integer
+                    ball_frameidx = int(frame)
+        
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                        for i in range(num_frames + 1)
+                    ]
+
+
+                    img_path_list = []
+    
+                    for idx in sub_ball_frame_indices:
+                        img_path = os.path.join(clip_dir, f'img_{idx:06d}.jpg')
+
+                        img_path_list.append(img_path)
+            
+                    # Check if any valid frames were found
+                    if not img_path_list:
+                        print(f"No valid frames found for event at frame {ball_frameidx}.")
+                        continue
+
+
+                    ball_position = np.array([x, y], dtype=int)
+                
+                    events_infor.append(img_path_list)
+                    events_labels.append([ball_position, visibility, status])
+
+               
+                
+               
+
+    print(f"{skipped_frame} skipped frame due to due to invalid last label")
+
+    return events_infor, events_labels
+
+
 def train_val_data_separation(configs):
     """Seperate data to training and validation sets"""
     if configs.dataset_choice == 'tt':
@@ -466,8 +538,22 @@ def train_val_data_separation(configs):
                                                                                                             test_size=configs.val_size,
                                                                                                             random_state=configs.seed,
                                                                                                             )
-    else:
+    elif configs.dataset_choice == 'tennis':
         events_infor, events_labels = get_all_detection_infor_tennis(configs.tennis_train_game_list, configs)
+        if configs.no_val:
+            train_events_infor = events_infor
+            train_events_labels = events_labels
+            val_events_infor = None
+            val_events_labels = None
+        else:
+            train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_test_split(events_infor,
+                                                                                                            events_labels,
+                                                                                                            shuffle=True,
+                                                                                                            test_size=configs.val_size,
+                                                                                                            random_state=configs.seed,
+                                                                                                            )
+    elif configs.dataset_choice == 'badminton':
+        events_infor, events_labels = get_all_detection_infor_badminton(configs.badminton_train_game_list, configs)
         if configs.no_val:
             train_events_infor = events_infor
             train_events_labels = events_labels
@@ -483,7 +569,24 @@ def train_val_data_separation(configs):
             
     return train_events_infor, val_events_infor, train_events_labels, val_events_labels
 
+def get_visibility_distribution(events_labels):
+    """
+    Calculate the distribution of visibility labels in the dataset.
 
+    Args:
+        events_labels (list): A list of labels where each label is of the form:
+                              [ball_position, visibility, status].
+
+    Returns:
+        dict: A dictionary with visibility levels as keys and their counts as values.
+    """
+    # Extract visibility values
+    visibility_values = [label[1] for label in events_labels]
+    
+    # Count occurrences of each visibility level
+    visibility_distribution = Counter(visibility_values)
+    
+    return dict(visibility_distribution)
 
 if __name__ == '__main__':
     from config.config import parse_configs
@@ -491,31 +594,32 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tennis'
+    configs.dataset_choice ='badminton'
     # configs.event = True
     configs.bidirect = True
+
     train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
+    test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
 
-    dataset_type = 'test'
-    if configs.event:
-        test_events_infor, test_events_labels = get_events_infor_noseg(configs.test_game_list, configs, dataset_type)
-    else:
-        test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
+    # dataset_type = 'test'
+    # if configs.event:
+    #     test_events_infor, test_events_labels = get_events_infor_noseg(configs.test_game_list, configs, dataset_type)
+    # else:
+    #     test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
     
     print(len(test_events_infor))
     print(train_events_infor[30])
     print(train_events_labels[30])
 
-    # for i, labels in enumerate(test_events_labels):
-    #     # Calculate the middle frame index
-    #     last_frame_idx = len(labels) - 1 # Integer division to get the middle frame
+    # Get distributions for train and validation datasets
+    train_visibility_distribution = get_visibility_distribution(train_events_labels)
+    val_visibility_distribution = get_visibility_distribution(val_events_labels)
+    test_visibility_distribution = get_visibility_distribution(test_events_labels)
 
-    #     # Check if the middle frame label is [-1, -1]
-    #     if (labels[last_frame_idx] == [-1, -1]).all():
-    #         print(f"Event {i}: Last frame has label [-1, -1]")
-    # print('Counter train_events_labels: {}'.format(Counter(train_events_labels)))
-    # if val_events_labels is not None:
-    #     print('Counter val_events_labels: {}'.format(Counter(val_events_labels)))
- 
+    # Print the results
+    print("Train Visibility Distribution:", train_visibility_distribution)
+    print("Validation Visibility Distribution:", val_visibility_distribution)
+    print("Test", test_visibility_distribution)
+
     

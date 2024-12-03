@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.append('../')
 
-from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset, Event_Dataset
-from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis, get_events_infor_noseg
+from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset, Event_Dataset, Badminton_Dataset
+from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis, get_events_infor_noseg, get_all_detection_infor_badminton
 from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask, RandomColorJitter
 
 
@@ -237,9 +237,13 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
         else:
             train_dataset = Occlusion_Dataset(train_events_infor, train_events_label, transform=train_transform,
                                         num_samples=configs.num_samples)
-    else:
+    elif configs.dataset_choice == 'tennis':
         train_dataset = Tennis_Dataset(train_events_infor, train_events_label, transform=train_transform,
                                     num_samples=configs.num_samples)
+    elif configs.dataset_choice == 'badminton':
+        train_dataset = Badminton_Dataset(train_events_infor, train_events_label, transform=train_transform,
+                                    num_samples=configs.num_samples)
+        
     # If subset_size is provided, create a subset for training
     if subset_size is not None:
         train_indices = torch.randperm(len(train_dataset))[:subset_size].tolist()
@@ -270,9 +274,13 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
             else:
                 val_dataset = Occlusion_Dataset(val_events_infor, val_events_label, transform=val_transform,
                                             num_samples=configs.num_samples)
-        else:
+        elif configs.dataset_choice == 'tennis':
             val_dataset = Tennis_Dataset(val_events_infor, val_events_label, transform=val_transform,
                                         num_samples=configs.num_samples)
+        elif configs.dataset_choice == 'badminton':
+            val_dataset = Badminton_Dataset(val_events_infor, val_events_label, transform=val_transform,
+                                        num_samples=configs.num_samples)
+
         # If subset_size is provided, create a subset for validation
         if subset_size is not None:
             val_indices = torch.randperm(len(val_dataset))[:subset_size].tolist()
@@ -306,9 +314,13 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
             test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
             test_dataset = Occlusion_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                     num_samples=configs.num_samples)
-    else:
+    elif configs.dataset_choice == 'tennis':
         test_events_infor, test_events_labels = get_all_detection_infor_tennis(configs.tennis_test_game_list, configs)
         test_dataset = Tennis_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                 num_samples=configs.num_samples)
+    elif configs.dataset_choice == 'badminton':
+        test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
+        test_dataset = Badminton_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
     test_sampler = None
 
@@ -370,8 +382,8 @@ if __name__ == '__main__':
     configs.num_frames = 5
     configs.occluded_prob = 0
 
-    configs.dataset_choice = 'tt'
-    configs.event = True
+    configs.dataset_choice = 'badminton'
+    # configs.event = True
     # configs.smooth_labelling = True
 
 
@@ -393,7 +405,7 @@ if __name__ == '__main__':
         frame_id = configs.num_frames//2
     # print(f"unique number of batch_data is {torch.unique(batch_data)}")
     # Check the shapes
-    print(f'ball frame is {frame_id}, print event is {event_classes}')
+    # print(f'ball frame is {frame_id}, print event is {event_classes}')
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
     print(f'Batch ball_xy shape: {ball_xys.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
     print(torch.unique(ball_xys))
