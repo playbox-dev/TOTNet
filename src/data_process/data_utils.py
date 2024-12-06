@@ -360,14 +360,15 @@ def get_all_detection_infor(game_list, configs, dataset_type):
                 continue
             
             ball_position = np.array([ball_location['x'], ball_location['y']], dtype=int)
-       
+
+            visibility = 1
             if (ball_position  == np.array([-1, -1])).all():
                 # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
                 skipped_frame += 1
                 continue  # Skip this event if the last frame is invalid
 
             events_infor.append(img_path_list)
-            events_labels.append(ball_position)
+            events_labels.append([ball_position, visibility])
 
     print(f"{skipped_frame} skipped frame due to due to invalid last label")
 
@@ -594,7 +595,7 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='badminton'
+    configs.dataset_choice ='tt'
     # configs.event = True
     configs.bidirect = True
 

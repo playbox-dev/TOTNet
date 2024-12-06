@@ -65,11 +65,11 @@ class EncoderBlock(nn.Module):
         # self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool3d = nn.AdaptiveMaxPool3d(pool_size)
 
-    def forward(self, x, num_frames):
+    def forward(self, x, num_frames, previous_infor=None):
         # input in shape [BN, C, H, W]
         BN, C, H, W = x.shape
         B = BN//num_frames
-  
+
         for layer in self.conv_layers:
             x = layer(x)
 
@@ -83,6 +83,9 @@ class EncoderBlock(nn.Module):
        
         temporal_out = x_temporal.clone()
         x = x_temporal + x_res  # Add residual
+
+        if previous_infor != None:
+            x += previous_infor
      
         x = self.pool3d(x)
         _, _, N, _, _ = x.shape
@@ -152,7 +155,6 @@ class DecoderBlock(nn.Module):
 
         return x
 
-
 class BottleNeckBlock(nn.Module):
     def __init__(self, in_channels, out_channels, spatial_kernel_size, temporal_kernel_size, 
                  padding='same', bias=True, num_spatial_layers=2, num_temporal_layers=1):
@@ -183,6 +185,7 @@ class BottleNeckBlock(nn.Module):
         # Block 4 which is the bottleneck block
         BN, C, H, W = x.shape
         B = BN//N
+
 
         for layer in self.conv_layers:
             x = layer(x)
@@ -230,11 +233,10 @@ class TemporalConvNet(nn.Module):
         self.convblock1_out_channels = spatial_channels * 2
         self.convblock2_out_channels = spatial_channels * 4
         self.convblock3_out_channels = spatial_channels * 8
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.softmax = nn.Softmax(dim=-1)
 
         size = (num_frames, input_shape[0], input_shape[1])
-        size1 = (5, 144, 256)
+        size1 = (num_frames, 144, 256)
         size2 = (3, 72, 128)
         size3 = (1, 36, 64)
 
@@ -294,7 +296,7 @@ class TemporalConvNet(nn.Module):
                     nn.init.constant_(module.bias, 0)
 
 
-    def forward(self, x):
+    def forward(self, x, previous_infor=None):
         """
         Args:
             x: Tensor of shape [B, N, C, H, W]
@@ -307,7 +309,7 @@ class TemporalConvNet(nn.Module):
         x = rearrange(x, 'b n c h w -> (b n) c h w', b=B, n=N) # Merge batch and frame dimensions
 
         # Block 1
-        x, spatial_out1, temporal_out1, N = self.block1(x, N)
+        x, spatial_out1, temporal_out1, N = self.block1(x, N, previous_infor)
 
         # Block 2
         x, spatial_out2, temporal_out2, N = self.block2(x, N)
@@ -327,6 +329,8 @@ class TemporalConvNet(nn.Module):
         # block 7
         x = self.block7(x, spatial_out1, temporal_out1) #outputs [B*N, C, H, W] 
 
+        information = x
+
         x = self.temp_reduce(x) 
         out = x.squeeze(dim=1).squeeze(dim=1) #[B, H, W]
 
@@ -338,7 +342,33 @@ class TemporalConvNet(nn.Module):
         vertical_heatmap = self.softmax(vertical_heatmap)
         horizontal_heatmap = self.softmax(horizontal_heatmap) 
 
-        return (horizontal_heatmap, vertical_heatmap), None
+        return (horizontal_heatmap, vertical_heatmap), None, information
+
+
+
+
+class SequenceConvNet(nn.Module):
+    def __init__(self, input_shape=(288, 512), spatial_channels=64, num_frames=6):
+        super(SequenceConvNet, self).__init__()
+
+        self.heatmap_model = TemporalConvNet(input_shape=input_shape, spatial_channels=spatial_channels, num_frames=num_frames//2)
+    
+    def forward(self, x):
+        """
+        Assuming x which contains [B, N, C, H, W], N would be 6 and it would divide to two 3 chunks each feed into the model 
+        Args:
+            x (_type_): _description_
+        """
+
+        # Split the tensor into two parts along the second dimension
+        tensor_part1 = x[:, :3, :, :, :]  # First 3 frames
+        tensor_part2 = x[:, 3:, :, :, :]  # Last 3 frames
+
+        _, _, information = self.heatmap_model(tensor_part1)
+
+        heatmap, _, _ = self.heatmap_model(tensor_part2, information)
+
+        return heatmap, None
 
 
 
@@ -347,7 +377,9 @@ def build_motion_model_light(args):
     model = TemporalConvNet(input_shape=(288, 512), spatial_channels=64, num_frames=args.num_frames).to(args.device)
     return model
 
-
+def build_sequence_model(args):
+    sequence_model = SequenceConvNet(input_shape=(288, 512), spatial_channels=64, num_frames=args.num_frames).to(args.device)
+    return sequence_model
 
 if __name__ == '__main__':
     from config.config import parse_configs
@@ -355,7 +387,7 @@ if __name__ == '__main__':
     from model.model_utils import get_num_parameters
 
     configs = parse_configs()
-    configs.num_frames = 5
+    configs.num_frames = 6
     configs.device = 'cpu'
     configs.batch_size = 5
     configs.img_size = (288, 512)
@@ -374,12 +406,13 @@ if __name__ == '__main__':
     # print(f"attention model num params is {get_num_parameters(network)}")
     # output = network(batch_data.float())
 
-    motion_model = build_motion_model_light(configs)
-    print(f"motion model num params is {get_num_parameters(motion_model)}")
+    # motion_model = build_motion_model_light(configs)
+    sequence_model = build_sequence_model(configs)
+    print(f" model num params is {get_num_parameters(sequence_model)}")
     # Start timer for data loading
     start_time = time.time()
     #Forward pass through the backbone
-    motion_features, cls = motion_model(batch_data.float())
+    motion_features, cls = sequence_model(batch_data.float())
     forward_pass_time = time.time() - start_time
     print(f"Forward pass time: {forward_pass_time:.4f} seconds")
     print(f"Features stacked_features Shape: horizontal {motion_features[0].shape},   vertical {motion_features[1].shape}")  # Expected: [B*P, 3, 2048, 34, 60]

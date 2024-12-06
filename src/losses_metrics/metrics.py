@@ -174,15 +174,15 @@ def precision_recall_f1_tracknet(pred_coords, target_coords, distance_threshold=
     - recall: Float, recall across the batch.
     - f1_score: Float, F1 score across the batch.
     """
-    device = pred_coords.device
 
     # Calculate Euclidean distances between predicted and target coordinates
     distances = torch.norm(pred_coords - target_coords, dim=1)  # Shape: [B]
 
-    # Determine true positives, false positives, and false negatives
-    tp = (distances <= distance_threshold).sum().float()  # True positives
-    fp = (distances > distance_threshold).sum().float()   # False positives, something is true but we are saying its false? When distance of our prediction is larger than threshold
-    fn = (distances.min(dim=0).values > distance_threshold).sum().float()  # False negatives: targets with no close prediction
+    # Determine true positives, false positives, false negatives, and true negatives
+    tp = ((distances <= distance_threshold) & (target_coords != (0, 0))).sum().float()  # True positives: ball is within the threshold and ball is in the frame
+    fp = ((distances > distance_threshold) & (target_coords != (0, 0))).sum().float()   # False positives: ball is in the frame but prediction is not correct
+    fn = ((target_coords != (0, 0)) & (pred_coords == (0, 0)))          # False negatives: ball is in the frame, but prediction says it’s not
+    tn = ((target_coords == (0, 0)) & (pred_coords == (0, 0)))          # True negatives: ball is not in the frame, and prediction correctly says so
 
     # Precision, recall, and F1 score calculations
     precision = tp / (tp + fp + 1e-8)  # Adding epsilon to avoid division by zero

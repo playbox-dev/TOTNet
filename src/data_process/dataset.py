@@ -175,7 +175,9 @@ class Occlusion_Dataset(Dataset):
 
     def __getitem__(self, index):
         img_path_list = self.events_infor[index]
-        ball_xy = self.events_label[index]
+        ball_xy = self.events_label[index][0]
+        visibility = self.events_label[index][1]
+
         imgs = []
         for img_path in img_path_list:
             img = cv2.imread(img_path)
@@ -201,7 +203,6 @@ class Occlusion_Dataset(Dataset):
             i+=1
         
         image_list_np = np.array(image_list)
-        visibility = 1
         status = -1 
         return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), visibility, status)
 

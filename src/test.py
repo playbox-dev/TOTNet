@@ -118,11 +118,8 @@ def test(test_loader, model, configs):
     # Initialize metrics for each visibility category
     visibility_metrics = { 
         vis: {
-            "rmse": AverageMeter(f"RMSE_Vis_{vis}", ":6.4f"),
+            "distance": AverageMeter(f"Distance_Vis_{vis}", ":6.4f"),
             "accuracy": AverageMeter(f"Accuracy_Vis_{vis}", "6.4f"),
-            "precision": AverageMeter(f"Precision_Vis_{vis}", "6.4f"),
-            "recall": AverageMeter(f"Recall_Vis_{vis}", "6.4f"),
-            "f1": AverageMeter(f"F1_Vis_{vis}", "6.4f"),
         } for vis in range(4)  # Assuming visibility levels 0 to 3
     }
 
@@ -169,6 +166,7 @@ def test(test_loader, model, configs):
             )
 
             # Update metrics for each sample by visibility
+
             for sample_idx in range(batch_size):
                
                 vis_label = visibility[sample_idx].item()  # Visibility label for this sample
@@ -183,21 +181,14 @@ def test(test_loader, model, configs):
           
                 ball_size = configs.ball_size*2 if vis_label==3 else configs.ball_size
                 within_threshold = dist <= ball_size
-                sample_accuracy = 1 if within_threshold else 0
 
-                # Calculate precision and recall for this sample
-                # Assuming you have functions for individual precision and recall
-                sample_precision = precision if within_threshold else 0
-                sample_recall = recall if within_threshold else 0
-                sample_f1 = f1 if within_threshold else 0
+                sample_accuracy = 1 if within_threshold else 0
+        
 
                 # Update visibility-specific metrics
-                visibility_metrics[vis_label]["rmse"].update(sample_rmse)
+                visibility_metrics[vis_label]["distance"].update(sample_rmse)
                 visibility_metrics[vis_label]["accuracy"].update(sample_accuracy)
-                visibility_metrics[vis_label]["precision"].update(sample_precision)
-                visibility_metrics[vis_label]["recall"].update(sample_recall)
-                visibility_metrics[vis_label]["f1"].update(sample_f1)
-                print(f"""Visibility {vis_label} - Ball Detection - Overall: (x, y) - org: ({label[0].item()}, {label[1].item()}), prediction = ({x_pred.item()}, {y_pred.item()}, rmse is {sample_rmse:.4f})""")
+                print(f"""Visibility {vis_label} - Ball Detection - Overall: (x, y) - org: ({label[0].item()}, {label[1].item()}), prediction = ({x_pred.item()}, {y_pred.item()}, distance is {sample_rmse:.4f})""")
 
 
             # Update overall metrics
@@ -218,9 +209,8 @@ def test(test_loader, model, configs):
     print("===== Visibility-Specific Results =====")
     for vis_label, metrics in visibility_metrics.items():
         print(
-            f"Visibility {vis_label}: RMSE: {metrics['rmse'].avg:.4f}, "
-            f"Accuracy: {metrics['accuracy'].avg:.4f}, Precision: {metrics['precision'].avg:.4f}, "
-            f"Recall: {metrics['recall'].avg:.4f}, F1: {metrics['f1'].avg:.4f}"
+            f"Visibility {vis_label}: Distance: {metrics['distance'].avg:.4f}, "
+            f"Accuracy: {metrics['accuracy'].avg:.4f}"
         )
     
     # Print overall results

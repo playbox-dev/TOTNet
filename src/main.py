@@ -18,9 +18,8 @@ from model.motion_model_v3 import build_motion_model_light_opticalflow
 from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
 from model.model_utils import make_data_parallel, get_num_parameters
-from losses_metrics.losses import Heatmap_Ball_Detection_Loss, focal_loss
+from losses_metrics.losses import Heatmap_Ball_Detection_Loss, focal_loss, Heatmap_Ball_Detection_Loss_Weighted
 from losses_metrics.metrics import heatmap_calculate_metrics, precision_recall_f1_tracknet, extract_coords, classification_metrics
-from losses_metrics.physics_loss import PhysicsLoss
 from config.config import parse_configs
 from utils.logger import Logger
 from utils.train_utils import create_optimizer, create_lr_scheduler, get_saved_state, save_checkpoint, reduce_tensor, to_python_float, print_nvidia_driver_version
@@ -131,7 +130,9 @@ def main_worker(configs):
     earlystop_count = 0
     is_best = False
 
-    loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
+    # loss_func = Heatmap_Ball_Detection_Loss_Gaussian().to(configs.device)
+    # loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
+    loss_func = Heatmap_Ball_Detection_Loss_Weighted().to(configs.device)
 
     if configs.is_master_node:
         num_parameters = get_num_parameters(model)
@@ -142,27 +143,6 @@ def main_worker(configs):
     # Create dataloader, option with normal data
     
     train_loader, val_loader, train_sampler = create_occlusion_train_val_dataloader(configs, subset_size=configs.num_samples)
-
-    # train_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in train_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     train_visibility_counts.update( visibility)
-    
-    # val_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in val_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     val_visibility_counts.update( visibility)
-
-    # print(f"Train visibility counter {train_visibility_counts}, Val visibility counter {val_visibility_counts}")
-
-    # test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
-    # test_visibility_counts = Counter()
-    # for _, (_, _,  visibility, _,) in test_loader:
-    #     visibility =  visibility.view(-1).numpy() if torch.is_tensor( visibility) else  visibility
-    #     test_visibility_counts.update( visibility)
-    # print(f"test visibility counter {test_visibility_counts}")
-
-    # exit()
 
     test_loader = None
     if configs.no_test == False:
@@ -300,7 +280,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
             cls_loss = torch.tensor(1e-8, device=configs.device)
         else:
             cls_loss = focal_loss(cls_score, visibiltity) * 0.1
-        heatmap_loss = loss_func(output_heatmap, labels)
+        heatmap_loss = loss_func(output_heatmap, labels, visibiltity)
         total_loss = heatmap_loss + cls_loss
 
 
@@ -393,7 +373,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                 cls_loss = torch.tensor(1e-8, device=configs.device)
             else:
                 cls_loss = focal_loss(cls_score, visibility) * 0.1 
-            heatmap_loss = loss_func(output_heatmap, labels)
+            heatmap_loss = loss_func(output_heatmap, labels, visibility)
             total_loss = heatmap_loss + cls_loss
 
             mse, rmse, mae, euclidean_distance = heatmap_calculate_metrics(output_heatmap, labels)
