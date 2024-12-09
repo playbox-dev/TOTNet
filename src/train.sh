@@ -52,7 +52,7 @@
 
 torchrun --nproc_per_node=2 main.py     \
     --num_epochs 20   \
-    --saved_fn 'normal_tracking_288_512_motion_light_tennis_weighted(5)'   \
+    --saved_fn 'normal_tracking_288_512_motion_light_badminton_weighted(5)(2)'   \
     --interval 1   \
     --num_frames 5  \
     --optimizer_type adamw  \
@@ -65,7 +65,7 @@ torchrun --nproc_per_node=2 main.py     \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --distributed \
-    --dataset_choice 'tennis' \
+    --dataset_choice 'badminton' \
     --model_choice 'motion_light'  \
     --occluded_prob 0 \
     --ball_size 4 \

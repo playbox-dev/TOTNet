@@ -132,7 +132,11 @@ def main_worker(configs):
 
     # loss_func = Heatmap_Ball_Detection_Loss_Gaussian().to(configs.device)
     # loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
-    loss_func = Heatmap_Ball_Detection_Loss_Weighted().to(configs.device)
+    if configs.dataset_choice == 'badminton':
+        weighted_list = [1, 2, 1, 1]
+    else:
+        weighted_list = [1, 2, 2, 3]
+    loss_func = Heatmap_Ball_Detection_Loss_Weighted(weighted_list=weighted_list).to(configs.device)
 
     if configs.is_master_node:
         num_parameters = get_num_parameters(model)

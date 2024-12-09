@@ -6,7 +6,7 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_motion_light_tt(5)' \
+  --saved_fn 'normal_tracking_288_512_motion_light_badminton_weighted(5)(2)' \
   --model_choice 'motion_light'  \
   --gpu_idx 0   \
   --batch_size 8   \
@@ -14,9 +14,9 @@ python test.py \
   --num_frames 5  \
   --interval 1   \
   --occluded_prob 0 \
-  --dataset_choice 'tt' \
+  --dataset_choice 'badminton' \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_tt(5)/normal_tracking_288_512_motion_light_tt(5)_best.pth' \
+  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_badminton_weighted(5)(2)/normal_tracking_288_512_motion_light_badminton_weighted(5)(2)_best.pth' \
 
 
 # deformable 

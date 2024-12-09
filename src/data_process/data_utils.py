@@ -595,7 +595,7 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tt'
+    configs.dataset_choice ='badminton'
     # configs.event = True
     configs.bidirect = True
 

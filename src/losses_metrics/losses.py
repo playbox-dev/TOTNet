@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class Heatmap_Ball_Detection_Loss_Weighted(nn.Module):
-    def __init__(self, weighted_list=[1, 2, 2, 3]):
+    def __init__(self, weighted_list=[1, 2, 2, 3], sigma=1):
         """
         Args:
         - weighted_list: List of weights corresponding to the four visibility classes.
@@ -12,6 +12,7 @@ class Heatmap_Ball_Detection_Loss_Weighted(nn.Module):
         super(Heatmap_Ball_Detection_Loss_Weighted, self).__init__()
         self.loss = nn.BCELoss(reduction="none")  # Avoid reduction for per-sample weighting
         self.weighted_list = weighted_list
+        self.sigma = sigma
 
     def forward(self, output, target_ball_position, visibility):
         """
@@ -494,61 +495,63 @@ def create_target_ball_right(ball_position_xy, sigma, w, h, thresh_mask, device)
 
 if __name__ == "__main__":
     # Initialize the loss function
-    loss_func = Heatmap_Ball_Detection_Loss_Weighted(weighted_list=[1, 2, 3, 3])
+    # loss_func = Heatmap_Ball_Detection_Loss_Weighted(weighted_list=[1, 2, 3, 3])
 
-    # Heatmap dimensions
-    width = 512
-    height = 288
+    # # Heatmap dimensions
+    # width = 512
+    # height = 288
 
-    # Generate a target in the middle of the heatmap
-    middle_target = torch.tensor([[300, 156]])  # Example ground truth
+    # # Generate a target in the middle of the heatmap
+    # middle_target = torch.tensor([[300, 156]])  # Example ground truth
 
-    # Generate a target at (0, 0)
-    out_of_frame_target = torch.tensor([[0, 0]])  # Example for out-of-frame
+    # # Generate a target at (0, 0)
+    # out_of_frame_target = torch.tensor([[0, 0]])  # Example for out-of-frame
 
-    # Create coordinate ranges
-    x_coords = torch.arange(width).float()
-    y_coords = torch.arange(height).float()
+    # # Create coordinate ranges
+    # x_coords = torch.arange(width).float()
+    # y_coords = torch.arange(height).float()
 
-    # Generate perfect Gaussian heatmaps
-    middle_x = middle_target[0, 0].float()
-    middle_y = middle_target[0, 1].float()
+    # # Generate perfect Gaussian heatmaps
+    # middle_x = middle_target[0, 0].float()
+    # middle_y = middle_target[0, 1].float()
 
-    # Gaussian centered at middle_target
-    heat_map_x_perfect = torch.exp(-((x_coords - middle_x) ** 2) / (2 * (2 ** 2)))  # Sigma=2
-    heat_map_y_perfect = torch.exp(-((y_coords - middle_y) ** 2) / (2 * (2 ** 2)))  # Sigma=2
+    # # Gaussian centered at middle_target
+    # heat_map_x_perfect = torch.exp(-((x_coords - middle_x) ** 2) / (2 * (2 ** 2)))  # Sigma=2
+    # heat_map_y_perfect = torch.exp(-((y_coords - middle_y) ** 2) / (2 * (2 ** 2)))  # Sigma=2
 
-    # Normalize heatmaps
-    heat_map_x_perfect /= heat_map_x_perfect.sum()
-    heat_map_y_perfect /= heat_map_y_perfect.sum()
+    # # Normalize heatmaps
+    # heat_map_x_perfect /= heat_map_x_perfect.sum()
+    # heat_map_y_perfect /= heat_map_y_perfect.sum()
 
-    # Reshape for batch dimension
-    heat_map_x_perfect = heat_map_x_perfect.unsqueeze(0)  # [1, W]
-    heat_map_y_perfect = heat_map_y_perfect.unsqueeze(0)  # [1, H]
+    # # Reshape for batch dimension
+    # heat_map_x_perfect = heat_map_x_perfect.unsqueeze(0)  # [1, W]
+    # heat_map_y_perfect = heat_map_y_perfect.unsqueeze(0)  # [1, H]
 
-    # Visibility labels (e.g., 0: visible, 1: partially visible, 2: occluded, 3: gaussian-based)
-    visibility_values = [1]  # Example visibility values for the batch
-    visibility = torch.tensor(visibility_values).unsqueeze(1)  # Shape [B, 1]
+    # # Visibility labels (e.g., 0: visible, 1: partially visible, 2: occluded, 3: gaussian-based)
+    # visibility_values = [1]  # Example visibility values for the batch
+    # visibility = torch.tensor(visibility_values).unsqueeze(1)  # Shape [B, 1]
 
-    # Compute the loss for a perfect match
-    loss_perfect = loss_func((heat_map_x_perfect, heat_map_y_perfect), middle_target, visibility)
-    print(f"Loss for perfect match: {loss_perfect.item()}")
+    # # Compute the loss for a perfect match
+    # loss_perfect = loss_func((heat_map_x_perfect, heat_map_y_perfect), middle_target, visibility)
+    # print(f"Loss for perfect match: {loss_perfect.item()}")
 
-    # Compute the loss for a perfect match
-    loss_perfect = loss_func((heat_map_x_perfect, heat_map_y_perfect), middle_target, 2)
-    print(f"Loss for perfect match: {loss_perfect.item()}")
+    # # Compute the loss for a perfect match
+    # loss_perfect = loss_func((heat_map_x_perfect, heat_map_y_perfect), middle_target, 2)
+    # print(f"Loss for perfect match: {loss_perfect.item()}")
 
-    # Simulate predicted heatmaps and normalize using softmax
-    heat_map_x = torch.softmax(torch.randn([1, width]), dim=-1)  # Predicted x-axis probabilities
-    heat_map_y = torch.softmax(torch.randn([1, height]), dim=-1)  # Predicted y-axis probabilities
+    # # Simulate predicted heatmaps and normalize using softmax
+    # heat_map_x = torch.softmax(torch.randn([1, width]), dim=-1)  # Predicted x-axis probabilities
+    # heat_map_y = torch.softmax(torch.randn([1, height]), dim=-1)  # Predicted y-axis probabilities
 
-    # Compute the loss for the middle target with noisy predictions
-    loss_middle = loss_func((heat_map_x, heat_map_y), middle_target, 1)
-    print(f"Loss for middle target with noisy predictions: {loss_middle.item()}")
+    # # Compute the loss for the middle target with noisy predictions
+    # loss_middle = loss_func((heat_map_x, heat_map_y), middle_target, 1)
+    # print(f"Loss for middle target with noisy predictions: {loss_middle.item()}")
 
-    # Compute the loss for the out-of-frame target
-    loss_out_of_frame = loss_func((heat_map_x, heat_map_y), out_of_frame_target, 0)
-    print(f"Loss for out-of-frame target: {loss_out_of_frame.item()}")
+    # # Compute the loss for the out-of-frame target
+    # loss_out_of_frame = loss_func((heat_map_x, heat_map_y), out_of_frame_target, 0)
+    # print(f"Loss for out-of-frame target: {loss_out_of_frame.item()}")
+
+    print(generate_gaussian_map(width=288, target_x=50, sigma=2))
 
 
 
