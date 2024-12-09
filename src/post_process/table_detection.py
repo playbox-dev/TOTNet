@@ -229,31 +229,253 @@ def get_user_selected_corners_with_matplotlib(image):
     # Convert points to integer tuples
     return [(int(x), int(y)) for x, y in points]
 
+def get_user_selected_corners_with_opencv(image):
+    """Allow the user to select four corners using OpenCV."""
+    print("Please click on the four corners of the table. Press Enter after each selection.")
+    
+    corners = []
+    for i in range(4):
+        roi = cv2.selectROI("Select Corners", image, showCrosshair=True)  # ROI selection
+        x, y = int(roi[0]), int(roi[1])  # Top-left corner of ROI
+        corners.append((x, y))
+        print(f"Corner {i+1}: {x}, {y}")
+
+    cv2.destroyAllWindows()
+    return corners
+
+
+def get_user_selected_corners_with_mouse(image):
+    """Allow the user to click on four corners of the table."""
+    global points, temp_image
+    points = []
+
+    def click_event(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:  # Left mouse button click
+            points.append((x, y))
+            print(f"Point selected: {x}, {y}")
+            cv2.circle(temp_image, (x, y), 5, (0, 0, 255), -1)
+            cv2.imshow("Select Corners", temp_image)
+
+    temp_image = image.copy()
+    cv2.imshow("Select Corners", temp_image)
+    cv2.setMouseCallback("Select Corners", click_event)
+
+    print("Click on four corners of the table.")
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    if len(points) != 4:
+        print("Error: You must select exactly 4 points.")
+        return None
+    return points
+
+
+def map_ball_to_table(image_corners, table_corners, ball_position):
+    """
+    Map a ball's position from image frame to table coordinates.
+    
+    Args:
+        image_corners (list of tuples): Four corners of the table in the image frame.
+        table_corners (list of tuples): Four corners of the table in the table coordinate system.
+        ball_position (tuple): (x, y) position of the ball in the image frame.
+
+    Returns:
+        tuple: (x, y) position of the ball in table coordinates.
+    """
+    # Convert corners to numpy arrays
+    image_corners_np = np.array(image_corners, dtype="float32")
+    table_corners_np = np.array(table_corners, dtype="float32")
+
+    # Compute perspective transform matrix
+    M = cv2.getPerspectiveTransform(image_corners_np, table_corners_np)
+
+    # Transform the ball position
+    ball_position_np = np.array([[ball_position]], dtype="float32")  # Shape (1, 1, 2)
+    transformed_position = cv2.perspectiveTransform(ball_position_np, M)
+
+    return tuple(transformed_position[0][0])  # Convert back to tuple
+
+def draw_ball_positions(image, table_corners, ball_position, table_position):
+    """
+    Draw the ball positions on the original image and the table view.
+
+    Args:
+        image (numpy array): Original image.
+        table_corners (list of tuples): Table corners in the top-down view.
+        ball_position (tuple): Ball position in the original image.
+        table_position (tuple): Ball position in the table view.
+    """
+    # Create a blank image for the table view
+    table_view = np.zeros((2740, 1525, 3), dtype=np.uint8)
+
+    # Draw the ball position on the original image
+    original_image = image.copy()
+    cv2.circle(original_image, ball_position, 10, (0, 0, 255), -1)  # Red circle for ball
+    cv2.putText(original_image, "Ball", (ball_position[0] + 10, ball_position[1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+
+    # Draw the table and ball position on the top-down view
+    cv2.polylines(table_view, [np.array(table_corners, dtype=np.int32)], isClosed=True, color=(255, 255, 255), thickness=2)
+    cv2.circle(table_view, (int(table_position[0]), int(table_position[1])), 10, (0, 255, 0), -1)  # Green circle for ball
+    cv2.putText(table_view, "Ball", (int(table_position[0]) + 10, int(table_position[1]) - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+    # Save or display the results
+    cv2.imwrite("original_with_ball.jpg", original_image)
+    cv2.imwrite("table_with_ball.jpg", table_view)
+
+    print("Ball positions drawn and saved.")
+
+def order_corners(corners):
+    """
+    Order the corners in the correct sequence: top-left, top-right, bottom-right, bottom-left.
+    Args:
+        corners (list of tuples): List of 4 (x, y) coordinates.
+    Returns:
+        list of tuples: Ordered corners.
+    """
+    corners = np.array(corners)
+
+    # Sum of x and y (top-left will have the smallest sum, bottom-right the largest)
+    s = corners.sum(axis=1)
+    top_left = corners[np.argmin(s)]
+    bottom_right = corners[np.argmax(s)]
+
+    # Difference of x and y (top-right will have the smallest difference, bottom-left the largest)
+    diff = np.diff(corners, axis=1)
+    top_right = corners[np.argmin(diff)]
+    bottom_left = corners[np.argmax(diff)]
+
+    return [tuple(top_left), tuple(top_right), tuple(bottom_right), tuple(bottom_left)]
+
+
+class Table_ball_transform:
+    def __init__(self, output_folder, table_image, table_corners = [(0, 0), (1525, 0), (1525, 2740), (0, 2740)]):
+        self.output_folder = output_folder
+        self.table_image = table_image
+        self.selected_corners = get_user_selected_corners_with_mouse(self.table_image)
+        self.corners_image_path = os.path.join(output_folder, "corners_images.jpg")
+        if self.selected_corners:
+            print("Selected corners:", self.selected_corners)
+            # Draw the selected corners and connect them
+            for point in self.selected_corners:
+                cv2.circle(image, point, 10, (0, 255, 0), -1)
+            cv2.polylines(image, [np.array(self.selected_corners, dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)
+
+            # Save the result
+            cv2.imwrite(self.corners_image_path, image)
+            print("Result saved with selected corners.")
+        self.table_corners = table_corners
+
+    def map_ball_to_table(self, ball_position):
+        """
+        Map a ball's position from image frame to table coordinates.
+        
+        Args:
+            image_corners (list of tuples): Four corners of the table in the image frame.
+            table_corners (list of tuples): Four corners of the table in the table coordinate system.
+            ball_position (tuple): (x, y) position of the ball in the image frame.
+
+        Returns:
+            tuple: (x, y) position of the ball in table coordinates.
+        """
+        # Convert corners to numpy arrays
+        image_corners_np = np.array(self.selected_corners, dtype="float32")
+        table_corners_np = np.array(self.table_corners, dtype="float32")
+
+        # Compute perspective transform matrix
+        M = cv2.getPerspectiveTransform(image_corners_np, table_corners_np)
+
+        # Transform the ball position
+        ball_position_np = np.array([[ball_position]], dtype="float32")  # Shape (1, 1, 2)
+        transformed_position = cv2.perspectiveTransform(ball_position_np, M)
+
+        return tuple(transformed_position[0][0])  # Convert back to tuple
+    
+    def draw_ball_positions(self, ball_position, table_position):
+        """
+        Draw the ball positions on the original image and the table view.
+
+        Args:
+            image (numpy array): Original image.
+            ball_position (tuple): Ball position in the original image.
+            table_position (tuple): Ball position in the table view.
+        """
+        # Create a blank image for the table view
+        table_view = np.zeros((2740, 1525, 3), dtype=np.uint8)
+
+        # Draw the ball position on the original image
+        original_image = self.table_image.copy()
+        cv2.circle(original_image, ball_position, 10, (0, 0, 255), -1)  # Red circle for ball
+        cv2.putText(original_image, "Ball", (ball_position[0] + 10, ball_position[1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+
+        # Draw the table and ball position on the top-down view
+        cv2.polylines(table_view, [np.array(self.table_corners, dtype=np.int32)], isClosed=True, color=(255, 255, 255), thickness=2)
+        cv2.circle(table_view, (int(table_position[0]), int(table_position[1])), 10, (0, 255, 0), -1)  # Green circle for ball
+        cv2.putText(table_view, "Ball", (int(table_position[0]) + 10, int(table_position[1]) - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+        # Save or display the results
+        cv2.imwrite("original_with_ball.jpg", original_image)
+        cv2.imwrite("table_with_ball.jpg", table_view)
+
+        print("Ball positions drawn and saved.")
+
+    def get_user_selected_corners_with_mouse(self, image):
+        """Allow the user to click on four corners of the table."""
+        global points, temp_image
+        points = []
+
+        def click_event(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:  # Left mouse button click
+                points.append((x, y))
+                print(f"Point selected: {x}, {y}")
+                cv2.circle(temp_image, (x, y), 5, (0, 0, 255), -1)
+                cv2.imshow("Select Corners", temp_image)
+
+        temp_image = image.copy()
+        cv2.imshow("Select Corners", temp_image)
+        cv2.setMouseCallback("Select Corners", click_event)
+
+        print("Click on four corners of the table.")
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        if len(points) != 4:
+            print("Error: You must select exactly 4 points.")
+            return None
+        
+        return points
+
+
 if __name__ == '__main__':
-    output_folder = "/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/results/demo/logs/output"
-    image = read_img("/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/images/img_000000.jpg")
+    output_folder = "/home/august/github/PhysicsInformedDeformableAttentionNetwork/results/demo/logs/output"
+    image = read_img("/home/august/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/images/img_000306.jpg")
     print(f"Image shape: {image.shape if image is not None else 'Image not loaded'}")
-
-    edges, image_with_contours, image_with_lines = draw_edge_contours(image)
-
-    selected_corners = get_user_selected_corners_with_matplotlib(image)
-    if selected_corners:
-        print("Selected corners:", selected_corners)
-        # Draw the selected corners and connect them
-        for point in selected_corners:
-            cv2.circle(image, point, 10, (0, 255, 0), -1)
-        cv2.polylines(image, [np.array(selected_corners, dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)
-
-        # Save the result
-        cv2.imwrite("/path/to/output_with_corners.jpg", image)
-        print("Result saved with selected corners.")
-
 
     # Save the images to the specified folder
     original_image_path = os.path.join(output_folder, "original_image.jpg")
     edges_image_path = os.path.join(output_folder, "edges_detected.jpg")
     contours_image_path = os.path.join(output_folder, "contours_image.jpg")
     lines_image_path = os.path.join(output_folder, "line_image.jpg")
+    corners_image_path = os.path.join(output_folder, "corners_images.jpg")
+
+    edges, image_with_contours, image_with_lines = draw_edge_contours(image)
+
+    table_ball_transform = Table_ball_transform(output_folder, table_image=image)
+
+
+    # ball_position = (864, 527) # left bottm
+    ball_position = (1097, 542) # right bottom
+    ball_position = (849, 410) #  top left
+    ball_position = (1000, 410) #  top right
+    ball_position = (1106, 433)
+    table_position = table_ball_transform.map_ball_to_table(ball_position)
+
+    print(f"Ball position in table coordinates: {table_position}")
+    table_ball_transform.draw_ball_positions(ball_position, table_position)
+
 
     # Save images
     cv2.imwrite(original_image_path, image)
