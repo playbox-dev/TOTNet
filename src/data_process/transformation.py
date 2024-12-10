@@ -11,11 +11,12 @@ class Compose(object):
         self.transforms = transforms
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         if random.random() <= self.p:
             for t in self.transforms:
-                imgs, ball_position_xy = t(imgs, ball_position_xy)
-        return imgs, ball_position_xy
+                result = t(imgs, ball_position_xy, visibility)
+                imgs, ball_position_xy, visibility = t(imgs, ball_position_xy, visibility)
+        return imgs, ball_position_xy, visibility
 
 
 class Normalize():
@@ -24,11 +25,11 @@ class Normalize():
         self.mean = np.array(mean).reshape(1, 1, 3)  # For individual image normalization
         self.std = np.array(std).reshape(1, 1, 3)
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         if random.random() < self.p:
             imgs = [((img / 255.) - self.mean) / self.std for img in imgs]
 
-        return imgs, ball_position_xy
+        return imgs, ball_position_xy, visibility
 
 
 class Denormalize():
@@ -50,7 +51,7 @@ class Resize(object):
         self.p = p
         self.interpolation = interpolation
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         """_summary_
 
         Args:
@@ -62,7 +63,7 @@ class Resize(object):
         """
         # If random value is greater than p, return original imgs and ball position
         if random.random() > self.p:
-            return imgs, ball_position_xy
+            return imgs, ball_position_xy, visibility
 
         # Original image dimensions (assuming imgs[0] has the original size)
         original_w, original_h, _ = imgs[0].shape
@@ -84,7 +85,7 @@ class Resize(object):
         # Round the coordinates to the nearest integer
         # transformed_ball_pos = np.round(transformed_ball_pos).astype(int)
         
-        return transformed_imgs, transformed_ball_pos
+        return transformed_imgs, transformed_ball_pos, visibility
 
 
 class Random_Crop(object):
@@ -93,7 +94,7 @@ class Random_Crop(object):
         self.p = p
         self.interpolation = interpolation
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         transformed_imgs = imgs.copy()
         transformed_ball_pos = ball_position_xy.copy()
         # imgs are before resizing
@@ -121,7 +122,7 @@ class Random_Crop(object):
                     transformed_ball_pos = np.array([(ball_position_xy[0] - min_x) * w_ratio,
                                             (ball_position_xy[1] - min_y) * h_ratio])
 
-        return transformed_imgs, transformed_ball_pos
+        return transformed_imgs, transformed_ball_pos, visibility
 
 
 class Random_Rotate(object):
@@ -129,7 +130,7 @@ class Random_Rotate(object):
         self.rotation_angle_limit = rotation_angle_limit
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             random_angle = random.uniform(-self.rotation_angle_limit, self.rotation_angle_limit)
@@ -146,14 +147,14 @@ class Random_Rotate(object):
             # Adjust ball position, apply the same rotate_matrix for the sequential images
             ball_position_xy = rotate_matrix.dot(np.array([ball_position_xy[0], ball_position_xy[1], 1.]).T)
 
-        return transformed_imgs, ball_position_xy
+        return transformed_imgs, ball_position_xy, visibility
 
 
 class Random_HFlip(object):
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
@@ -166,14 +167,14 @@ class Random_HFlip(object):
             # Adjust ball position: Same y, new x = w - x
             ball_position_xy[0] = w - ball_position_xy[0]
 
-        return transformed_imgs, ball_position_xy
+        return transformed_imgs, ball_position_xy, visibility
 
 
 class Random_VFlip(object):
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         transformed_imgs = imgs.copy()
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
@@ -186,7 +187,7 @@ class Random_VFlip(object):
             # Adjust ball position: Same x, new y = h - y
             ball_position_xy[1] = h - ball_position_xy[1]
 
-        return transformed_imgs, ball_position_xy
+        return transformed_imgs, ball_position_xy, visibility
 
 
 
@@ -202,7 +203,7 @@ class Random_Ball_Mask:
         self.p = p
         self.mask_type = mask_type
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         """
         Args:
             imgs : List of numpy arrays where the length represents num frames
@@ -221,6 +222,7 @@ class Random_Ball_Mask:
             if random.random() < self.p:
                 if i == len(imgs)-1:
                     x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
+                    visibility = 3
                 else:
                     # Apply mask at a random position in non-labeled frames
                     x = random.randint(0, W - mask_w)
@@ -243,8 +245,10 @@ class Random_Ball_Mask:
                     mean_value = img[top:top + mask_h, left:left + mask_w, :].mean(axis=(0, 1))
                     noise = np.random.randn(mask_h, mask_w, C) * 10  # Small noise
                     img[top:top + mask_h, left:left + mask_w, :] = (mean_value + noise).clip(0, 255)  # Apply mean
+                
 
-        return imgs, ball_position_xy
+
+        return imgs, ball_position_xy, visibility
 
 
 
@@ -266,7 +270,7 @@ class RandomColorJitter(object):
         self.hue = hue
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy):
+    def __call__(self, imgs, ball_position_xy, visibility):
         """
         Applies random color jitter to a sequence of images.
 
@@ -285,7 +289,7 @@ class RandomColorJitter(object):
                 jittered_img = self.apply_jitter(img)
                 transformed_imgs.append(jittered_img)
 
-        return transformed_imgs, ball_position_xy
+        return transformed_imgs, ball_position_xy, visibility
 
     def apply_jitter(self, img):
         """

@@ -67,7 +67,7 @@ torchrun --nproc_per_node=2 main.py     \
     --distributed \
     --dataset_choice 'badminton' \
     --model_choice 'motion_light'  \
-    --occluded_prob 0 \
+    --occluded_prob 0.1 \
     --ball_size 4 \
     --no_test   \
     --val-size 0.2 \

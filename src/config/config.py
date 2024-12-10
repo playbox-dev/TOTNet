@@ -197,6 +197,9 @@ def parse_configs():
     configs.badminton_train_game_list = ['Amateur', 'Professional']
     configs.badminton_test_game_list = ['Test']
 
+    configs.tta_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset')
+    configs.tta_game_list = ['24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN']
+
     make_folder(configs.checkpoints_dir)
     make_folder(configs.logs_dir)
     make_folder(configs.results_dir)
