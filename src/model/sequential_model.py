@@ -193,11 +193,14 @@ class BottleNeckBlock(nn.Module):
         x = rearrange(x, '(b n) c h w -> b c n h w',b=B, n=N)
         x_res = x  # Residual connection
 
+        x_temporal = None
         # Temporal Convolution using Conv3d
         for layer in self.temp_layers:
             x_temporal = layer(x)
-        
-        x = x_temporal + x_res  # Add residual
+        if x_temporal != None:
+            x = x_temporal + x_res  # Add residual
+        else:
+            x = x_res
         
 
         if previous_infor != None:
@@ -238,6 +241,7 @@ class TemporalConvNet(nn.Module):
         self.convblock2_out_channels = spatial_channels * 4
         self.convblock3_out_channels = spatial_channels * 8
         self.softmax = nn.Softmax(dim=-1)
+        self.num_frames = num_frames
 
         size = (num_frames, input_shape[0], input_shape[1])
         size1 = (num_frames, 144, 256)
@@ -248,7 +252,7 @@ class TemporalConvNet(nn.Module):
         # block 1
         # Spatial convolutions
         self.block1 = EncoderBlock(pool_size=size1, in_channels=3, out_channels=spatial_channels, 
-                                spatial_kernel_size=3, temporal_kernel_size=(5, 3, 3))
+                                spatial_kernel_size=3, temporal_kernel_size=(self.num_frames, 3, 3))
 
         # block 2 
         self.block2 = EncoderBlock(pool_size=size2, in_channels=spatial_channels, out_channels=self.convblock1_out_channels, 
@@ -262,7 +266,7 @@ class TemporalConvNet(nn.Module):
 
         self.bottle_neck = BottleNeckBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock3_out_channels,
                                            spatial_kernel_size=1, temporal_kernel_size=(1, 1, 1), 
-                                           num_spatial_layers=3, num_temporal_layers=2)
+                                           num_spatial_layers=3, num_temporal_layers=0)
 
         #block 5
         self.block5 = DecoderBlock(size2, self.convblock3_out_channels+self.convblock2_out_channels, self.convblock2_out_channels, 
@@ -276,7 +280,7 @@ class TemporalConvNet(nn.Module):
 
         #block 7
         self.block7 = DecoderBlock(size, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 
-                                   spatial_kernel_size=3, temporal_kernel_size=(5, 3, 3), final=False)
+                                   spatial_kernel_size=3, temporal_kernel_size=(self.num_frames, 3, 3), final=False)
 
 
         # projection block
@@ -361,7 +365,7 @@ class BounceConvNet(nn.Module):
 
 
 class SequentialConvNet(nn.Module):
-    def __init__(self, input_shape=(288, 512), spatial_channels=64, total_num_frames=9, heatmap_num_frames=3):
+    def __init__(self, input_shape=(288, 512), spatial_channels=64, total_num_frames=5, heatmap_num_frames=3):
         super(SequentialConvNet, self).__init__()
 
         self.heatmap_num_frames = heatmap_num_frames
@@ -379,7 +383,6 @@ class SequentialConvNet(nn.Module):
         B, N, C, H, W = x.shape
         heatmaps = None
         cls = None
-        final_ball_xys = []
 
         # Ensure we have enough frames to process
         for i in range(N):
@@ -400,9 +403,8 @@ class SequentialConvNet(nn.Module):
                 input = torch.cat([input, pad_input], dim=1)
             # Process the input through heatmap model
             ball_xys_heatmaps, _, heatmaps = self.heatmap_model(input, heatmaps)
-            final_ball_xys.append(ball_xys_heatmaps)
 
-        return final_ball_xys, cls
+        return ball_xys_heatmaps, cls
 
 
 
@@ -427,12 +429,12 @@ if __name__ == '__main__':
     configs.img_size = (288, 512)
     configs.dataset_choice = 'tennis'
     # Create dataloaders
-    # train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
-    # batch_data, (masked_frameids, labels, _, _) = next(iter(train_dataloader))
+    train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs)
+    batch_data, (masked_frameids, labels, _, _) = next(iter(train_dataloader))
  
 
     # print(torch.unique(batch_data))
-    batch_data = torch.randn([configs.batch_size, configs.num_frames, 3, 288, 512])
+    # batch_data = torch.randn([configs.batch_size, configs.num_frames, 3, 288, 512])
 
     batch_data = batch_data.to(configs.device)
 
@@ -452,7 +454,7 @@ if __name__ == '__main__':
     print(f"length of output is {len(motion_features)}")
     forward_pass_time = time.time() - start_time
     print(f"Forward pass time: {forward_pass_time:.4f} seconds")
-    print(f"Features stacked_features Shape: horizontal {motion_features[0][0].shape},   vertical {motion_features[0][1].shape}")  # Expected: [B*P, 3, 2048, 34, 60]
+    print(f"Features stacked_features Shape: horizontal {motion_features[0].shape},   vertical {motion_features[1].shape}")  # Expected: [B*P, 3, 2048, 34, 60]
     print(f"cls score is {cls}")
-    print(torch.unique(motion_features[0][0]))
+    print(torch.unique(motion_features[0]))
     
