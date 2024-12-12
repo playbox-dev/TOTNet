@@ -156,6 +156,7 @@ class Random_HFlip(object):
 
     def __call__(self, imgs, ball_position_xy, visibility):
         transformed_imgs = imgs.copy()
+        transformed_ball_position_xy = ball_position_xy.copy()
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
             transformed_imgs = []
@@ -165,9 +166,9 @@ class Random_HFlip(object):
                 transformed_imgs.append(transformed_img)
 
             # Adjust ball position: Same y, new x = w - x
-            ball_position_xy[0] = w - ball_position_xy[0]
-
-        return transformed_imgs, ball_position_xy, visibility
+            transformed_ball_position_xy[0] = w - transformed_ball_position_xy[0]
+       
+        return transformed_imgs, transformed_ball_position_xy, visibility
 
 
 class Random_VFlip(object):

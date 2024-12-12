@@ -458,7 +458,8 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                     logger.info(progress.get_message(batch_idx))
 
             start_time = time.time()
-
+    if logger is not None:
+        logger.info(f"overall evaluation performance loss:{losses.avg}, accuracy: {accuracy_overall.avg}")
     return losses.avg
 
 if __name__ == '__main__':

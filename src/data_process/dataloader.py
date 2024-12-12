@@ -220,9 +220,9 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
     train_transform = Compose([
         RandomColorJitter(p=0.3),
         Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
-        Random_HFlip(p=0.2),
-        Random_VFlip(p=0),
-        Random_Rotate(rotation_angle_limit=5, p=0.1),
+        # Random_HFlip(p=0.2),
+        # Random_VFlip(p=0),
+        # Random_Rotate(rotation_angle_limit=5, p=0.1),
         Random_Crop(max_reduction_percent=0.2, p=0.25),
         Resize(new_size=configs.img_size, p=necessary_prob),
         Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
@@ -382,19 +382,25 @@ def concatenate_images_horizontally(images):
 
 if __name__ == '__main__':
     from config.config import parse_configs
+    import random
 
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (288, 512)
+    configs.img_size = (720, 1280)
     configs.interval = 1
     configs.num_frames = 5
     configs.occluded_prob = 0
-
+    # configs.bidrection = True
     configs.dataset_choice = 'tta'
     # configs.event = True
     # configs.smooth_labelling = True
-
+    
+    seed = 213221
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     # Create Masked dataloaders 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs, necessary_prob=0)
@@ -423,7 +429,7 @@ if __name__ == '__main__':
     sample_data = batch_data[0]  # Shape: [B, C, H, W]
 
     # Select the first frame
-    img = sample_data[0]  # Shape: [C, H, W]
+    img = sample_data[frame_id]  # Shape: [C, H, W]
 
     # Transpose the dimensions to [H, W, C]
     image = np.transpose(img, (1, 2, 0))  # Shape: [H, W, C]
@@ -460,5 +466,7 @@ if __name__ == '__main__':
         # Save the combined image
         output_path = os.path.join(out_images_dir, f'test_batch_{batch_index}_combined.jpg')
         cv2.imwrite(output_path, combined_image)
+        output_path = os.path.join(out_images_dir, f'test_batch_{batch_index}_masked.jpg')
+        cv2.imwrite(output_path, img_with_ball)
 
     print("All combined images saved successfully.")

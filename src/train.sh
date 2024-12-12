@@ -50,9 +50,33 @@
 #     --val-size 0.2 \
 
 
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 20   \
+#     --saved_fn 'normal_tracking_288_512_motion_light_badminton_weighted(5)(2)'   \
+#     --interval 1   \
+#     --num_frames 5  \
+#     --optimizer_type adamw  \
+#     --lr 5e-4 \
+#     --weight_decay 5e-5 \
+#     --img_size 288 512 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'badminton' \
+#     --model_choice 'motion_light'  \
+#     --occluded_prob 0.1 \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+
+
+
 torchrun --nproc_per_node=2 main.py     \
     --num_epochs 20   \
-    --saved_fn 'normal_tracking_288_512_motion_light_badminton_weighted(5)(2)'   \
+    --saved_fn 'normal_tracking_288_512_motion_light_opticalflow_tt(5)'   \
     --interval 1   \
     --num_frames 5  \
     --optimizer_type adamw  \
@@ -65,12 +89,13 @@ torchrun --nproc_per_node=2 main.py     \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --distributed \
-    --dataset_choice 'badminton' \
-    --model_choice 'motion_light'  \
-    --occluded_prob 0.1 \
+    --dataset_choice 'tt' \
+    --model_choice 'motion_light_opticalflow'  \
+    --occluded_prob 0 \
     --ball_size 4 \
     --no_test   \
     --val-size 0.2 \
+
 
 
 

@@ -33,8 +33,8 @@ def parse_configs():
                        help="If using multiple GPUs for distributed training")
     parser.add_argument('--print_freq', type=int, default=100, metavar='N',
                         help='print frequency (default: 100)')
-    parser.add_argument('--checkpoint_freq', type=int, default=2, metavar='N',
-                        help='frequency of saving checkpoints (default: 2)')
+    parser.add_argument('--checkpoint_freq', type=int, default=1, metavar='N',
+                        help='frequency of saving checkpoints (default: 1)')
     parser.add_argument('--earlystop_patience', type=int, default=None, metavar='N',
                         help='Early stopping the training process if performance is not improved within this value')
     parser.add_argument('--save_test_output', action='store_true',

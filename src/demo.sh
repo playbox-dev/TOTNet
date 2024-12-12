@@ -19,6 +19,6 @@ python demo.py \
     --gpu_idx 0   \
     --model_choice 'motion_light' \
     --num_frames 5  \
-    --dataset_choice tt \
-    --video_path '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/videos/24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN.MP4' \
-    --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_tt(5)/normal_tracking_288_512_motion_light_tt(5)_best.pth' \
+    --dataset_choice tta \
+    --video_path '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/training/videos/24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN.MP4' \
+    --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_TTA(5)/normal_tracking_288_512_motion_light_TTA(5)_best.pth' \

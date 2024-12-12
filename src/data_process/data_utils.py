@@ -434,7 +434,7 @@ def get_all_detection_infor_tennis(game_list, configs):
 
 
                 ball_position = np.array([x, y], dtype=int)
-                # if (ball_position  == np.array([-1, -1])).all():
+                # if visibility!=2:
                 #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
                 #     skipped_frame += 1
                 #     continue  # Skip this event if the last frame is invalid
@@ -446,6 +446,76 @@ def get_all_detection_infor_tennis(game_list, configs):
 
     return events_infor, events_labels
 
+
+def get_all_detection_infor_tennis_sequence(game_list, configs):
+    num_frames = configs.num_frames - 1
+
+    dir = os.path.join(configs.tennis_dataset_dir)
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+
+    for game_name in game_list:
+        game_dir = os.path.join(dir, game_name)
+        clips_list = [name for name in os.listdir(game_dir)]
+        for clip_name in clips_list:
+            clip_dir = os.path.join(game_dir, clip_name)
+            ball_annos_path = os.path.join(clip_dir, 'Label.csv')
+
+            # Load ball annotations from CSV
+            ball_annos = []
+            with open(ball_annos_path, mode='r') as csv_file:
+                csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+                for row in csv_reader:
+                    ball_annos.append(row)
+            
+            for row in ball_annos:
+                file_name = row['file name']  # Assuming `file_name` is a column in the CSV
+                visibility = int(row['visibility']) if row['visibility'] else -1  # Convert visibility to integer
+                x = int(row['x-coordinate']) if row['x-coordinate'] else -1  # Default to -1 if empty Convert x-coordinate to integer
+                y = int(row['y-coordinate']) if row['y-coordinate'] else -1  # Default to -1 if empty 
+                status = int(row['status']) if row['status'] else -1
+
+                # Extract the first four characters from file_name and convert to an integer
+                ball_frameidx = int(file_name[:4])
+
+                # Create frame indices with the correct interval, with the key frame as the last frame
+                if configs.bidirect:
+                    middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                        for i in range(num_frames + 1)
+                    ]
+                else:
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                        for i in range(num_frames + 1)
+                    ]
+
+
+                img_path_list = []
+                for idx in sub_ball_frame_indices:
+                    img_path = os.path.join(clip_dir, f'{idx:04d}.jpg')
+                    img_path_list.append(img_path)
+                
+                # Check if any valid frames were found
+                if not img_path_list:
+                    print(f"No valid frames found for event at frame {ball_frameidx}.")
+                    continue
+
+
+                ball_position = np.array([x, y], dtype=int)
+                # if visibility!=2:
+                #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+                #     skipped_frame += 1
+                #     continue  # Skip this event if the last frame is invalid
+               
+                events_infor.append(img_path_list)
+                events_labels.append([ball_position, visibility, status])
+
+    print(f"{skipped_frame} skipped frame due to due to invalid last label")
+
+    return events_infor, events_labels
 
 def get_all_detection_infor_badminton(level_list, configs):
     num_frames = configs.num_frames - 1
@@ -574,6 +644,12 @@ def get_all_detection_infor_tta(configs, dataset_type):
             if not img_path_list:
                 print(f"No valid frames found for event at frame {ball_frameidx}.")
                 continue
+                
+            # if visibility!=3:
+            #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+            #     skipped_frame += 1
+            #     continue  # Skip this event if the last frame is invalid
+               
 
             ball_position = np.array([x, y], dtype=int)
 
