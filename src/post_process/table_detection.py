@@ -354,6 +354,7 @@ class Table_ball_transform:
         self.output_folder = output_folder
         self.table_image = table_image
         self.selected_corners = get_user_selected_corners_with_mouse(self.table_image)
+        self.selected_corners = order_corners(self.selected_corners)
         self.corners_image_path = os.path.join(output_folder, "corners_images.jpg")
         if self.selected_corners:
             print("Selected corners:", self.selected_corners)
@@ -391,13 +392,12 @@ class Table_ball_transform:
         transformed_position = cv2.perspectiveTransform(ball_position_np, M)
 
         return tuple(transformed_position[0][0])  # Convert back to tuple
-    
+        
     def draw_ball_positions(self, ball_position, table_position):
         """
         Draw the ball positions on the original image and the table view.
 
         Args:
-            image (numpy array): Original image.
             ball_position (tuple): Ball position in the original image.
             table_position (tuple): Ball position in the table view.
         """
@@ -416,11 +416,21 @@ class Table_ball_transform:
         cv2.putText(table_view, "Ball", (int(table_position[0]) + 10, int(table_position[1]) - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
+        # Draw the net line (horizontal line) in the middle of the table view
+        table_height, table_width = table_view.shape[:2]
+        net_y = table_height // 2  # Middle Y-coordinate for horizontal line
+        cv2.line(table_view, (0, net_y), (table_width, net_y), color=(255, 255, 255), thickness=2)
+
+        # Draw the vertical line in the middle of the table view
+        net_x = table_width // 2  # Middle X-coordinate for vertical line
+        cv2.line(table_view, (net_x, 0), (net_x, table_height), color=(255, 255, 255), thickness=2)
+
         # Save or display the results
         cv2.imwrite("original_with_ball.jpg", original_image)
         cv2.imwrite("table_with_ball.jpg", table_view)
 
-        print("Ball positions drawn and saved.")
+        print("Ball positions and net drawn (both horizontal and vertical) and saved.")
+
 
     def get_user_selected_corners_with_mouse(self, image):
         """Allow the user to click on four corners of the table."""
