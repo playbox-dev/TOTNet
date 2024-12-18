@@ -21,6 +21,8 @@ from model.wasb import build_wasb
 from model.motion_model import build_motion_model
 from model.motion_model_light import build_motion_model_light
 from model.motion_model_v3 import build_motion_model_light_opticalflow
+from model.motion_model_light_v2 import build_motion_model_lightv2
+from model.monoTrack import build_monoTrack
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap, save_batch_optical_flow_visualization
@@ -91,6 +93,12 @@ def main_worker(gpu_idx, configs):
     elif configs.model_choice == 'motion_light_opticalflow':
         print("Building Motion Light Optical Flow model...")
         model = build_motion_model_light_opticalflow(configs)
+    elif configs.model_choice == 'motion_lightv2':
+        print("Building motion light v2")
+        model = build_motion_model_lightv2(configs)
+    elif configs.model_choice == 'monoTrack':
+        print("Building MonoTrack")
+        model = build_monoTrack(configs)
     else:
         raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
@@ -148,7 +156,7 @@ def test(test_loader, model, configs):
 
 
             # Compute output
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
+            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
                 # #for tracknet we need to rehsape the data
                 B, N, C, H, W = batch_data.shape
                 # Permute to bring frames and channels together

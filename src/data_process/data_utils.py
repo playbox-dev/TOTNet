@@ -2,6 +2,7 @@ import os
 import json
 import sys
 import csv
+import ast
 from collections import Counter
 from collections import defaultdict
 
@@ -433,7 +434,7 @@ def get_all_detection_infor_tennis(game_list, configs):
 
 
                 ball_position = np.array([x, y], dtype=int)
-                # if (ball_position  == np.array([-1, -1])).all():
+                # if visibility!=2:
                 #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
                 #     skipped_frame += 1
                 #     continue  # Skip this event if the last frame is invalid
@@ -445,6 +446,93 @@ def get_all_detection_infor_tennis(game_list, configs):
 
     return events_infor, events_labels
 
+
+def get_all_detection_infor_tennis_sequence(game_list, configs):
+    num_frames = configs.num_frames - 1
+
+    dir = os.path.join(configs.tennis_dataset_dir)
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+
+    for game_name in game_list:
+        game_dir = os.path.join(dir, game_name)
+        clips_list = [name for name in os.listdir(game_dir)]
+        for clip_name in clips_list:
+            clip_dir = os.path.join(game_dir, clip_name)
+            ball_annos_path = os.path.join(clip_dir, 'Label.csv')
+
+            # Load ball annotations from CSV
+            ball_annos = []
+            with open(ball_annos_path, mode='r') as csv_file:
+                csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+                for row in csv_reader:
+                    ball_annos.append(row)
+            
+            # Build a dictionary to easily map frame indices to annotations
+            frame_to_ball = {
+                int(row['file name'][:4]): {
+                    'x': int(row['x-coordinate']) if row['x-coordinate'] else -1,
+                    'y': int(row['y-coordinate']) if row['y-coordinate'] else -1,
+                    'visibility': int(row['visibility']) if row['visibility'] else -1,
+                    'status': int(row['status']) if row['status'] else -1
+                }
+                for row in ball_annos
+            }
+            
+            for row in ball_annos:
+                file_name = row['file name']  # Assuming `file_name` is a column in the CSV
+                visibility = int(row['visibility']) if row['visibility'] else -1
+                x = int(row['x-coordinate']) if row['x-coordinate'] else -1
+                y = int(row['y-coordinate']) if row['y-coordinate'] else -1
+                status = int(row['status']) if row['status'] else -1
+
+                # Extract the first four characters from file_name and convert to an integer
+                ball_frameidx = int(file_name[:4])
+
+                # Create frame indices with the correct interval, with the key frame as the last frame
+                if configs.bidirect:
+                    middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                        for i in range(num_frames + 1)
+                    ]
+                else:
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                        for i in range(num_frames + 1)
+                    ]
+
+                img_path_list = []
+                ball_positions = []  # List to store ball positions for all frames
+                for idx in sub_ball_frame_indices:
+                    img_path = os.path.join(clip_dir, f'{idx:04d}.jpg')
+                    img_path_list.append(img_path)
+                    
+                    # Add ball position for the corresponding frame
+                    if idx in frame_to_ball:
+                        ball_info = frame_to_ball[idx]
+                        ball_positions.append([np.array([ball_info['x'], ball_info['y']], dtype=int), ball_info['visibility'], ball_info['status']])
+                    else:
+                        # If no annotation is found for this frame, append a placeholder
+                        ball_positions.append([[-1, -1], -1, -1])
+
+                # Check if any valid frames were found
+                if not img_path_list:
+                    print(f"No valid frames found for event at frame {ball_frameidx}.")
+                    continue
+
+                # Uncomment the following to skip events with invalid last frame labels
+                # if ball_positions[-1][2] != 2:
+                #     skipped_frame += 1
+                #     continue  # Skip this event if the last frame is invalid
+               
+                events_infor.append(img_path_list)
+                events_labels.append(ball_positions)
+
+    print(f"{skipped_frame} skipped frames due to invalid last label")
+
+    return events_infor, events_labels
 
 def get_all_detection_infor_badminton(level_list, configs):
     num_frames = configs.num_frames - 1
@@ -505,7 +593,7 @@ def get_all_detection_infor_badminton(level_list, configs):
 
 
                     ball_position = np.array([x, y], dtype=int)
-                
+ 
                     events_infor.append(img_path_list)
                     events_labels.append([ball_position, visibility, status])
 
@@ -517,6 +605,78 @@ def get_all_detection_infor_badminton(level_list, configs):
 
     return events_infor, events_labels
 
+
+def get_all_detection_infor_tta(configs, dataset_type):
+    num_frames = configs.num_frames - 1
+    annos_dir = os.path.join(configs.tta_dataset_dir, dataset_type, 'annotations')
+    images_dir = os.path.join(configs.tta_dataset_dir, dataset_type, 'images')
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+
+    for game_name in configs.tta_game_list:
+        ball_annos_path = os.path.join(annos_dir, game_name, 'labels.csv')
+        game_image_dir = os.path.join(images_dir, game_name)
+        # Load ball annotations from CSV
+        ball_annos = []
+        with open(ball_annos_path, mode='r') as csv_file:
+            csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+            for row in csv_reader:
+                ball_annos.append(row)
+        
+        for row in ball_annos:
+            file_name = row['img']
+            image_name = os.path.basename(file_name)  # get image name 
+            visibility = int(row.get('visibility', [0])[0]) if row.get('visibility') and len(row['visibility']) > 0 else 0
+            status = -1
+            ball_annotation = row['kp-1']
+            if ball_annotation == '':
+                x = 0
+                y = 0
+            else:
+                ball_annotation = ast.literal_eval(ball_annotation)[0]
+                x = int(ball_annotation['x'] * ball_annotation['original_width'] / 100)  # Convert to pixel
+                y = int(ball_annotation['y'] * ball_annotation['original_height'] / 100)  # Convert to pixel
+            
+            ball_frameidx = int(image_name[4:10])
+            # Create frame indices with the correct interval, with the key frame as the last frame
+            if configs.bidirect:
+                middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                sub_ball_frame_indices = [
+                    ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                    for i in range(num_frames + 1)
+                ]
+            else:
+                sub_ball_frame_indices = [
+                    ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                    for i in range(num_frames + 1)
+                ]
+        
+            img_path_list = []
+            for idx in sub_ball_frame_indices:
+                img_path = os.path.join(game_image_dir, f'img_{idx:06d}.jpg')
+                img_path_list.append(img_path)
+            
+            # Check if any valid frames were found
+            if not img_path_list:
+                print(f"No valid frames found for event at frame {ball_frameidx}.")
+                continue
+                
+            # if visibility!=3:
+            #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+            #     skipped_frame += 1
+            #     continue  # Skip this event if the last frame is invalid
+               
+
+            ball_position = np.array([x, y], dtype=int)
+
+            events_infor.append(img_path_list)
+            events_labels.append([ball_position, visibility, status])
+
+    print(f"{skipped_frame} skipped frame due to due to invalid last label")
+
+    return events_infor, events_labels
+ 
 
 def train_val_data_separation(configs):
     """Seperate data to training and validation sets"""
@@ -540,7 +700,10 @@ def train_val_data_separation(configs):
                                                                                                             random_state=configs.seed,
                                                                                                             )
     elif configs.dataset_choice == 'tennis':
-        events_infor, events_labels = get_all_detection_infor_tennis(configs.tennis_train_game_list, configs)
+        if configs.sequential:
+            events_infor, events_labels = get_all_detection_infor_tennis_sequence(configs.tennis_train_game_list, configs)
+        else:
+            events_infor, events_labels = get_all_detection_infor_tennis(configs.tennis_train_game_list, configs)
         if configs.no_val:
             train_events_infor = events_infor
             train_events_labels = events_labels
@@ -567,6 +730,20 @@ def train_val_data_separation(configs):
                                                                                                             test_size=configs.val_size,
                                                                                                             random_state=configs.seed,
                                                                                                             )
+    elif configs.dataset_choice == 'tta':
+        events_infor, events_labels = get_all_detection_infor_tta(configs, 'training')
+        if configs.no_val:
+            train_events_infor = events_infor
+            train_events_labels = events_labels
+            val_events_infor = None
+            val_events_labels = None
+        else:
+            train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_test_split(events_infor,
+                                                                                                            events_labels,
+                                                                                                            shuffle=True,
+                                                                                                            test_size=configs.val_size,
+                                                                                                            random_state=configs.seed,
+                                                                                                            )
             
     return train_events_infor, val_events_infor, train_events_labels, val_events_labels
 
@@ -581,8 +758,17 @@ def get_visibility_distribution(events_labels):
     Returns:
         dict: A dictionary with visibility levels as keys and their counts as values.
     """
-    # Extract visibility values
-    visibility_values = [label[1] for label in events_labels]
+    visibility_values = []
+    for label in events_labels:
+        if isinstance(label[-1], (list, tuple)) and len(label[-1]) > 1:
+            # If the last element is a list/tuple with more than one element
+            visibility_values.append(label[-1][1])
+        elif isinstance(label, (list, tuple)) and len(label) > 1:
+            # Otherwise, use the second element if the label itself is a list/tuple
+            visibility_values.append(label[1])
+        else:
+            # Handle cases where visibility is not found
+            visibility_values.append(-1)  # Default or placeholder value
     
     # Count occurrences of each visibility level
     visibility_distribution = Counter(visibility_values)
@@ -595,13 +781,18 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='badminton'
+    configs.dataset_choice ='tennis'
     # configs.event = True
-    configs.bidirect = True
+    # configs.bidirect = True
+    configs.sequential = True
 
+   
+
+    
     train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
     test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
+    # print(len(test_events_infor))
 
     # dataset_type = 'test'
     # if configs.event:
@@ -609,7 +800,6 @@ if __name__ == '__main__':
     # else:
     #     test_events_infor, test_events_labels = get_all_detection_infor(configs.test_game_list, configs, dataset_type)
     
-    print(len(test_events_infor))
     print(train_events_infor[30])
     print(train_events_labels[30])
 

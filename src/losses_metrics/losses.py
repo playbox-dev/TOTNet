@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class Heatmap_Ball_Detection_Loss_Weighted(nn.Module):
-    def __init__(self, weighted_list=[1, 2, 2, 3], sigma=1):
+    def __init__(self, weighted_list=[1, 2, 2, 3], sigma=0.3):
         """
         Args:
         - weighted_list: List of weights corresponding to the four visibility classes.
@@ -65,6 +65,10 @@ class Heatmap_Ball_Detection_Loss_Weighted(nn.Module):
         if gaussian_mask.any():
             target_x_map[gaussian_mask] = target_x_map_gaussian.squeeze(1)  # Replace for Gaussian targets
             target_y_map[gaussian_mask] = target_y_map_gaussian.squeeze(1)
+
+            # Normalize each map to sum to 1
+            target_x_map[gaussian_mask] /= target_x_map[gaussian_mask].sum(dim=-1, keepdim=True)
+            target_y_map[gaussian_mask] /= target_y_map[gaussian_mask].sum(dim=-1, keepdim=True)
 
         # Compute binary cross-entropy loss for x and y without reduction
         loss_x = self.loss(pred_x, target_x_map).sum(dim=1)  # Sum across width [B]
@@ -329,7 +333,8 @@ def generate_gaussian_map(width, target_x, sigma=0.5):
     """
     x_coords = torch.arange(width).float()  # 1D coordinate space
     gaussian_map = torch.exp(-((x_coords - target_x)**2) / (2 * sigma**2))  # Gaussian formula
-    return gaussian_map
+    normalized_gaussian_map = gaussian_map / gaussian_map.sum()  # Normalize to sum to 1
+    return normalized_gaussian_map
 
 
 # Example usage
@@ -551,7 +556,7 @@ if __name__ == "__main__":
     # loss_out_of_frame = loss_func((heat_map_x, heat_map_y), out_of_frame_target, 0)
     # print(f"Loss for out-of-frame target: {loss_out_of_frame.item()}")
 
-    print(generate_gaussian_map(width=288, target_x=50, sigma=2))
+    print(generate_gaussian_map(width=288, target_x=50, sigma=0.45))
 
 
 

@@ -11,25 +11,24 @@ class Compose(object):
         self.transforms = transforms
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         if random.random() <= self.p:
             for t in self.transforms:
-                result = t(imgs, ball_position_xy, visibility)
-                imgs, ball_position_xy, visibility = t(imgs, ball_position_xy, visibility)
-        return imgs, ball_position_xy, visibility
+                imgs, ball_position_xys, visibilities = t(imgs, ball_position_xys, visibilities)
+        return imgs, ball_position_xys, visibilities
 
 
 class Normalize():
-    def __init__(self, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), num_frames_sequence=9, p=1.0):
+    def __init__(self, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), p=1.0):
         self.p = p
         self.mean = np.array(mean).reshape(1, 1, 3)  # For individual image normalization
         self.std = np.array(std).reshape(1, 1, 3)
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         if random.random() < self.p:
             imgs = [((img / 255.) - self.mean) / self.std for img in imgs]
 
-        return imgs, ball_position_xy, visibility
+        return imgs, ball_position_xys, visibilities
 
 
 class Denormalize():
@@ -51,7 +50,7 @@ class Resize(object):
         self.p = p
         self.interpolation = interpolation
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         """_summary_
 
         Args:
@@ -63,66 +62,94 @@ class Resize(object):
         """
         # If random value is greater than p, return original imgs and ball position
         if random.random() > self.p:
-            return imgs, ball_position_xy, visibility
+            return imgs, ball_position_xys, visibilities
 
         # Original image dimensions (assuming imgs[0] has the original size)
         original_w, original_h, _ = imgs[0].shape
 
         # New image dimensions
         new_w, new_h = self.new_size
-        
-        # Resize a sequence of images
-        transformed_imgs = []
-        for img in imgs:
-            transformed_img = cv2.resize(img, (new_h, new_w), interpolation=self.interpolation)
-            transformed_imgs.append(transformed_img)
 
         # Adjust ball position
         w_ratio = float(original_w) / float(new_w)  # New width divided by original width
         h_ratio = float(original_h) / float(new_h) # New height divided by original height
-
-        transformed_ball_pos = np.array([ball_position_xy[0] / w_ratio, ball_position_xy[1] / h_ratio])
-        # Round the coordinates to the nearest integer
-        # transformed_ball_pos = np.round(transformed_ball_pos).astype(int)
         
-        return transformed_imgs, transformed_ball_pos, visibility
+        # Resize a sequence of images
+        transformed_imgs = []
+        transformed_ball_pos_xys = []
+        for img, ball_xy in zip(imgs, ball_position_xys):
+            transformed_img = cv2.resize(img, (new_h, new_w), interpolation=self.interpolation)
+            transformed_imgs.append(transformed_img)
+            transformed_ball_pos = np.array([ball_xy[0] / w_ratio, ball_xy[1] / h_ratio])
+            transformed_ball_pos_xys.append(transformed_ball_pos)
+            
+        
+        return transformed_imgs, transformed_ball_pos_xys, visibilities
 
 
 class Random_Crop(object):
     def __init__(self, max_reduction_percent=0.15, p=0.5, interpolation=cv2.INTER_LINEAR):
+        """
+        Args:
+            max_reduction_percent (float): Maximum percentage to reduce dimensions.
+            p (float): Probability of applying the crop.
+            interpolation (int): Interpolation method for resizing (default: cv2.INTER_LINEAR).
+        """
         self.max_reduction_percent = max_reduction_percent
         self.p = p
         self.interpolation = interpolation
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
+        """
+        Args:
+            imgs (list): List of images (numpy arrays).
+            ball_position_xys (list): List of ball positions [[x1, y1], [x2, y2], ...].
+            visibilities (list): List of visibilities for each frame.
+
+        Returns:
+            transformed_imgs: Cropped and resized images.
+            transformed_ball_position_xys: Updated ball positions after cropping.
+            visibilities: Same visibilities, unchanged.
+        """
         transformed_imgs = imgs.copy()
-        transformed_ball_pos = ball_position_xy.copy()
-        # imgs are before resizing
+        transformed_ball_position_xys = ball_position_xys.copy()
+
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
-            # Calculate min_x, max_x, min_y, max_y
-            remain_percent = random.uniform(1. - self.max_reduction_percent, 1.)
-            new_w = remain_percent * w
-            min_x = int(random.uniform(0, w - new_w))
-            max_x = int(min_x + new_w)
-            w_ratio = w / new_w
 
-            new_h = remain_percent * h
-            min_y = int(random.uniform(0, h - new_h))
-            max_y = int(new_h + min_y)
+            # Randomly calculate new crop dimensions
+            remain_percent = random.uniform(1. - self.max_reduction_percent, 1.)
+            new_w = int(remain_percent * w)
+            new_h = int(remain_percent * h)
+
+            min_x = random.randint(0, w - new_w)
+            min_y = random.randint(0, h - new_h)
+            max_x = min_x + new_w
+            max_y = min_y + new_h
+
+            # Scaling factors to map cropped coordinates back to original size
+            w_ratio = w / new_w
             h_ratio = h / new_h
-            # crop a sequence of images
+
+            # Apply cropping and resizing for each frame
             transformed_imgs = []
-            for i, img in enumerate(imgs):
+            transformed_ball_position_xys = []
+            for img, ball_xy in zip(imgs, ball_position_xys):
+                # Crop the image
                 img_cropped = img[min_y:max_y, min_x:max_x, :]
-                # Resize the image to the original dimensions
+
+                # Resize the cropped image back to the original dimensions
                 img_resized = cv2.resize(img_cropped, (w, h), interpolation=self.interpolation)
                 transformed_imgs.append(img_resized)
-                if i == len(imgs):
-                    transformed_ball_pos = np.array([(ball_position_xy[0] - min_x) * w_ratio,
-                                            (ball_position_xy[1] - min_y) * h_ratio])
 
-        return transformed_imgs, transformed_ball_pos, visibility
+                # Adjust the ball position
+                transformed_ball_pos = [
+                    (ball_xy[0] - min_x) * w_ratio,
+                    (ball_xy[1] - min_y) * h_ratio
+                ]
+                transformed_ball_position_xys.append(transformed_ball_pos)
+
+        return transformed_imgs, transformed_ball_position_xys, visibilities
 
 
 class Random_Rotate(object):
@@ -130,8 +157,9 @@ class Random_Rotate(object):
         self.rotation_angle_limit = rotation_angle_limit
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         transformed_imgs = imgs.copy()
+        transformed_ball_position_xys = ball_position_xys.copy()
         if random.random() <= self.p:
             random_angle = random.uniform(-self.rotation_angle_limit, self.rotation_angle_limit)
             # Rotate a sequence of imgs
@@ -140,55 +168,69 @@ class Random_Rotate(object):
             rotate_matrix = cv2.getRotationMatrix2D(center, random_angle, 1.)
 
             transformed_imgs = []
-            for img in imgs:
+            transformed_ball_position_xys = []
+            for img, ball_xy in zip(imgs, ball_position_xys):
                 transformed_img = cv2.warpAffine(img, rotate_matrix, (w, h), flags=cv2.INTER_LINEAR)
                 transformed_imgs.append(transformed_img)
+                transformed_ball_xy = rotate_matrix.dot(np.array([ball_xy[0], ball_xy[1], 1.]).T)
+                transformed_ball_position_xys.append(transformed_ball_xy)
 
-            # Adjust ball position, apply the same rotate_matrix for the sequential images
-            ball_position_xy = rotate_matrix.dot(np.array([ball_position_xy[0], ball_position_xy[1], 1.]).T)
 
-        return transformed_imgs, ball_position_xy, visibility
+        return transformed_imgs, transformed_ball_position_xys, visibilities
 
 
 class Random_HFlip(object):
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         transformed_imgs = imgs.copy()
-        transformed_ball_position_xy = ball_position_xy.copy()
+        transformed_ball_position_xys = ball_position_xys.copy()
+
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
             transformed_imgs = []
-            for img in imgs:
+            for i, (img, ball_xy) in enumerate(zip(imgs, ball_position_xys)):
                 # Horizontal flip a sequence of imgs
                 transformed_img = cv2.flip(img, 1)
                 transformed_imgs.append(transformed_img)
+                # Adjust ball position: Same y, new x = w - x
+                transformed_ball_position_xys[i][0] = w - ball_xy[0]
 
-            # Adjust ball position: Same y, new x = w - x
-            transformed_ball_position_xy[0] = w - transformed_ball_position_xy[0]
-       
-        return transformed_imgs, transformed_ball_position_xy, visibility
+        return transformed_imgs, transformed_ball_position_xys, visibilities
 
 
 class Random_VFlip(object):
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
+        """
+        Args:
+            imgs: List of numpy arrays representing frames.
+            ball_position_xys: List of [x, y] coordinates for each frame.
+            visibilities: List of visibilities for each frame.
+
+        Returns:
+            Transformed images, updated ball positions, and visibilities.
+        """
         transformed_imgs = imgs.copy()
+        transformed_ball_position_xys = ball_position_xys.copy()
+
         if random.random() <= self.p:
             h, w, c = imgs[0].shape
             transformed_imgs = []
-            for img in imgs:
-                # Horizontal flip a sequence of imgs
-                transformed_img = cv2.flip(img, 0)
+
+            for i, (img, ball_xy) in enumerate(zip(imgs, ball_position_xys)):
+                # Vertical flip a sequence of images
+                transformed_img = cv2.flip(img, 0)  # Flip vertically
                 transformed_imgs.append(transformed_img)
 
-            # Adjust ball position: Same x, new y = h - y
-            ball_position_xy[1] = h - ball_position_xy[1]
+                # Adjust ball position: Same x, new y = h - y
+                transformed_ball_position_xys[i][1] = h - ball_xy[1]
 
-        return transformed_imgs, ball_position_xy, visibility
+        return transformed_imgs, transformed_ball_position_xys, visibilities
+
 
 
 
@@ -206,7 +248,7 @@ class Random_Ball_Mask:
         self.mask_type = mask_type
         self.shapes = shapes
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         """
         Args:
             imgs : List of numpy arrays where the length represents num frames
@@ -220,11 +262,11 @@ class Random_Ball_Mask:
         mask_h = random.randint(self.mask_size[0] - movement_range, self.mask_size[0] + movement_range)
         mask_w = random.randint(self.mask_size[1] - movement_range, self.mask_size[1] + movement_range)
 
-        for i, img in enumerate(imgs):
+        for i, img, ball_xy in enumerate(zip(imgs, ball_position_xys)):
             if random.random() < self.p:
                 if i == len(imgs) - 1:
-                    x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
-                    visibility = 3
+                    x, y = int(ball_xy[0]), int(ball_xy[1])
+                    visibilities[i] = 3
                 else:
                     # Apply mask at a random position in non-labeled frames
                     x = random.randint(0, W - mask_w)
@@ -267,7 +309,7 @@ class Random_Ball_Mask:
                     noise = np.random.randn(*img.shape) * 10  # Add small noise
                     img[mask.astype(bool)] = (mean_value + noise.clip(0, 255))[mask.astype(bool)]
 
-        return imgs, ball_position_xy, visibility
+        return imgs, ball_position_xys, visibilities
 
 
 
@@ -289,7 +331,7 @@ class RandomColorJitter(object):
         self.hue = hue
         self.p = p
 
-    def __call__(self, imgs, ball_position_xy, visibility):
+    def __call__(self, imgs, ball_position_xys, visibilities):
         """
         Applies random color jitter to a sequence of images.
 
@@ -308,7 +350,7 @@ class RandomColorJitter(object):
                 jittered_img = self.apply_jitter(img)
                 transformed_imgs.append(jittered_img)
 
-        return transformed_imgs, ball_position_xy, visibility
+        return transformed_imgs, ball_position_xys, visibilities
 
     def apply_jitter(self, img):
         """
