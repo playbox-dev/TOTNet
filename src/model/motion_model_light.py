@@ -191,10 +191,14 @@ class BottleNeckBlock(nn.Module):
         x_res = x  # Residual connection
 
         # Temporal Convolution using Conv3d
+        x_temporal = None
         for layer in self.temp_layers:
             x_temporal = layer(x)
         
-        x = x_temporal + x_res  # Add residual
+        if x_temporal != None:
+            x = x_temporal + x_res  # Add residual
+        else:
+            x = x_res
 
         # x = rearrange(x, 'b c n h w -> b c n h w', b=B, n=self.num_frames)
 
@@ -227,6 +231,7 @@ class TemporalConvNet(nn.Module):
         super(TemporalConvNet, self).__init__()
 
         self.spatial_channels = spatial_channels
+        self.num_frames = num_frames
         self.convblock1_out_channels = spatial_channels * 2
         self.convblock2_out_channels = spatial_channels * 4
         self.convblock3_out_channels = spatial_channels * 8
@@ -242,7 +247,7 @@ class TemporalConvNet(nn.Module):
         # block 1
         # Spatial convolutions
         self.block1 = EncoderBlock(pool_size=size1, in_channels=3, out_channels=spatial_channels, 
-                                spatial_kernel_size=3, temporal_kernel_size=(5, 3, 3))
+                                spatial_kernel_size=3, temporal_kernel_size=(size[0], 3, 3))
 
         # block 2 
         self.block2 = EncoderBlock(pool_size=size2, in_channels=spatial_channels, out_channels=self.convblock1_out_channels, 
@@ -270,7 +275,7 @@ class TemporalConvNet(nn.Module):
 
         #block 7
         self.block7 = DecoderBlock(size, self.convblock1_out_channels+self.spatial_channels, self.spatial_channels, 
-                                   spatial_kernel_size=3, temporal_kernel_size=(5, 3, 3), final=False)
+                                   spatial_kernel_size=3, temporal_kernel_size=(size[0], 3, 3), final=False)
 
 
         # projection block

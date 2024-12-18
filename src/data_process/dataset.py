@@ -257,7 +257,54 @@ class Tennis_Dataset(Dataset):
         image_list_np = np.array(image_list)
         return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), visibility, status)
 
+class Tennis_Sequence_Dataset(Dataset):
+    def __init__(self, events_infor, events_label, transform=None, num_samples=None, color=(0, 0, 0)):
+        self.events_infor = events_infor
+        self.events_label = events_label
+        self.transform = transform
+        self.color = color
 
+        if num_samples is not None:
+            self.events_infor = self.events_infor[:num_samples]
+
+    def __len__(self):
+        return len(self.events_infor)
+
+    def __getitem__(self, index):
+        img_path_list = self.events_infor[index]
+        event_data = self.events_label[index]  # Extract the event's data (list of lists)
+        ball_xys = [entry[0] for entry in event_data]   
+        visibilities = [entry[1] for entry in event_data] 
+        status = [entry[2] for entry in event_data]      
+        imgs = []
+        for img_path in img_path_list:
+            img = cv2.imread(img_path)
+            if img is None:
+                # print(f"Warning: Image not found or can't be read at path: {img_path}")
+                placeholder_img = np.full((720, 1280, 3), self.color, dtype=np.uint8)
+                imgs.append(placeholder_img)
+            else:
+                imgs.append(img)
+        # Apply augmentation
+        if self.transform:
+            imgs, ball_xys, visibilities = self.transform(imgs, ball_xys, visibilities)
+        
+        converted_imgs = []
+        for img in imgs:    
+            # after transform all images will be in shape (H, W, C)
+            img = np.transpose(img, (2, 0, 1))  # Now img is (C, H, W)
+            converted_imgs.append(img)
+      
+        image_list=[]
+
+        masked_frameid = len(converted_imgs)-1
+        i = 0
+        while i < len(converted_imgs):
+            image_list.append(np.array(converted_imgs[i]))
+            i+=1
+        
+        image_list_np = np.array(image_list)
+        return image_list_np, (masked_frameid, np.array(ball_xys.astype(int)), visibilities, status)
 
 class Badminton_Dataset(Dataset):
     def __init__(self, events_infor, events_label, transform=None, num_samples=None, color=(0, 0, 0)):

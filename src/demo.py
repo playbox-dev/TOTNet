@@ -101,7 +101,7 @@ def demo(configs):
             if configs.save_demo_output:
                 cv2.imwrite(os.path.join(configs.frame_dir, '{:06d}.jpg'.format(frame_idx)), ploted_img)
 
-            if count == 3000:
+            if count == 10000:
                 break
 
             frame_idx += 1

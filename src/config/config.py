@@ -62,6 +62,15 @@ def parse_configs():
                         help="numebr of queries in the transformer")
     parser.add_argument('--model_choice', type=str, required=True,
                         help="choice of model including wasb, tracknet, tracknetv2, mamba")
+    parser.add_argument(
+        '--weighting_list', 
+        type=int, 
+        nargs=4,  # This makes sure 4
+        metavar=('vis_0', 'vis_1', 'vis_2', 'vis_3'),  # Labels for help message
+        default=[1, 2, 2, 3],  # Default as a list
+        help="Specify the weighting of loss bce(e.g., --weighting_list 1 2 2 3)"
+    )
+    
     
     ####################################################################
     ##############     Demonstration configurations     ###################
@@ -97,6 +106,8 @@ def parse_configs():
                         help='weight decay (default: 1e-5)')
     parser.add_argument('--optimizer_type', type=str, default='adam', metavar='OPTIMIZER',
                         help='the type of optimizer, it can be sgd or adam')
+    parser.add_argument('--loss_function', type=str, default='WBCE',
+                        help='the type of loss function, it can be BCE or WBCE')
     parser.add_argument('--lr_type', type=str, default='plateau', metavar='SCHEDULER',
                         help='the type of the learning rate scheduler (steplr or ReduceonPlateau)')
     parser.add_argument('--lr_factor', type=float, default=0.5, metavar='FACTOR',
@@ -115,6 +126,8 @@ def parse_configs():
                         help='If true, use event dataset, which is only available in tt dataset! ')
     parser.add_argument('--bidirect', action='store_true',
                         help='If true, ball frame will be middle not last, if false will be last')
+    parser.add_argument('--sequential', action='store_true',
+                        help='If true, sequential dataset will be used, the data will contains all ball locations for all frames')
     parser.add_argument('--smooth_labelling', action='store_true',
                         help='If true, smooth labelling is true')
     parser.add_argument(

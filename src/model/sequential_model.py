@@ -9,7 +9,6 @@ import torchvision.ops.deform_conv
 from einops import rearrange
 
 sys.path.append('../')
-from model.backbone_positional_encoding import create_positional_encoding
     
 
 class ConvBlock(nn.Module):
@@ -266,7 +265,7 @@ class TemporalConvNet(nn.Module):
 
         self.bottle_neck = BottleNeckBlock(in_channels=self.convblock2_out_channels, out_channels=self.convblock3_out_channels,
                                            spatial_kernel_size=1, temporal_kernel_size=(1, 1, 1), 
-                                           num_spatial_layers=3, num_temporal_layers=0)
+                                           num_spatial_layers=3, num_temporal_layers=2)
 
         #block 5
         self.block5 = DecoderBlock(size2, self.convblock3_out_channels+self.convblock2_out_channels, self.convblock2_out_channels, 
@@ -365,7 +364,7 @@ class BounceConvNet(nn.Module):
 
 
 class SequentialConvNet(nn.Module):
-    def __init__(self, input_shape=(288, 512), spatial_channels=64, total_num_frames=5, heatmap_num_frames=3):
+    def __init__(self, input_shape=(288, 512), spatial_channels=64, total_num_frames=10, heatmap_num_frames=5):
         super(SequentialConvNet, self).__init__()
 
         self.heatmap_num_frames = heatmap_num_frames
@@ -386,6 +385,8 @@ class SequentialConvNet(nn.Module):
 
         # Ensure we have enough frames to process
         for i in range(N):
+            if i < 3:
+                continue
             # Correctly slice input with proper boundary handling
             start = max(0, i - self.heatmap_num_frames + 1)
             end = i + 1
@@ -423,7 +424,7 @@ if __name__ == '__main__':
     from model.model_utils import get_num_parameters
 
     configs = parse_configs()
-    configs.num_frames = 5
+    configs.num_frames = 8
     configs.device = 'cuda'
     configs.batch_size = 1
     configs.img_size = (288, 512)

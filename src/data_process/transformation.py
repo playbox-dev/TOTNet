@@ -193,16 +193,18 @@ class Random_VFlip(object):
 
 
 class Random_Ball_Mask:
-    def __init__(self, mask_size=(20, 20), p=0.5, mask_type='mean'):
+    def __init__(self, mask_size=(20, 20), p=0.5, mask_type='mean', shapes=['rectangle', 'circle', 'ellipse']):
         """
         Args:
             mask_size (tuple): Height and width of the mask area (blackout area).
             p (float): Probability of applying the mask.
             mask_type (str): Type of mask ('zero', 'noise', 'mean').
+            shapes (list of str): List of shapes to choose from ('rectangle', 'circle', 'ellipse').
         """
         self.mask_size = mask_size
         self.p = p
         self.mask_type = mask_type
+        self.shapes = shapes
 
     def __call__(self, imgs, ball_position_xy, visibility):
         """
@@ -214,14 +216,13 @@ class Random_Ball_Mask:
             masked_imgs: Tensor with the ball area masked in some frames.
         """
         H, W, C = imgs[0].shape  # Get the shape from the input tensor
-        movement_range = self.mask_size[0]//2
+        movement_range = self.mask_size[0] // 2
         mask_h = random.randint(self.mask_size[0] - movement_range, self.mask_size[0] + movement_range)
         mask_w = random.randint(self.mask_size[1] - movement_range, self.mask_size[1] + movement_range)
-        x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
-        # Iterate over all frames and apply masking with some probability
-        for i, (img) in enumerate(imgs):
+
+        for i, img in enumerate(imgs):
             if random.random() < self.p:
-                if i == len(imgs)-1:
+                if i == len(imgs) - 1:
                     x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
                     visibility = 3
                 else:
@@ -233,21 +234,38 @@ class Random_Ball_Mask:
                 top = max(0, min(H - mask_h, y - mask_h // 2))
                 left = max(0, min(W - mask_w, x - mask_w // 2))
 
-                # Apply the chosen mask type
+                # Randomly select a shape
+                shape = random.choice(self.shapes)
+
+                # Create the mask
+                mask = np.zeros_like(img, dtype=np.uint8)
+
+                if shape == 'rectangle':
+                    cv2.rectangle(mask, (left, top), (left + mask_w, top + mask_h), (1, 1, 1), -1)
+
+                elif shape == 'circle':
+                    radius = min(mask_h, mask_w) // 2
+                    center = (x, y)
+                    cv2.circle(mask, center, radius, (1, 1, 1), -1)
+
+                elif shape == 'ellipse':
+                    center = (x, y)
+                    axes = (mask_w // 2, mask_h // 2)
+                    angle = random.randint(0, 360)  # Random rotation
+                    cv2.ellipse(mask, center, axes, angle, 0, 360, (1, 1, 1), -1)
+
+                # Generate the masked region based on the mask type
                 if self.mask_type == 'zero':
-                    img[top:top + mask_h, left:left + mask_w, :] = 0
+                    img[mask.astype(bool)] = 0
 
                 elif self.mask_type == 'noise':
-                    noise = np.random.randn(mask_h, mask_w, C) * 255  # Generate noise in the same shape
-                    img[top:top + mask_h, left:left + mask_w, :] = noise.clip(0, 255)  # Apply noise
+                    noise = np.random.randn(*img.shape) * 255  # Generate noise in the same shape
+                    img[mask.astype(bool)] = noise.clip(0, 255)[mask.astype(bool)]
 
                 elif self.mask_type == 'mean':
-                    # Calculate the mean value along the spatial dimensions
-                    mean_value = img[top:top + mask_h, left:left + mask_w, :].mean(axis=(0, 1))
-                    noise = np.random.randn(mask_h, mask_w, C) * 10  # Small noise
-                    img[top:top + mask_h, left:left + mask_w, :] = (mean_value + noise).clip(0, 255)  # Apply mean
-                
-
+                    mean_value = img[mask.astype(bool)].mean(axis=0) if mask.astype(bool).sum() > 0 else 0
+                    noise = np.random.randn(*img.shape) * 10  # Add small noise
+                    img[mask.astype(bool)] = (mean_value + noise.clip(0, 255))[mask.astype(bool)]
 
         return imgs, ball_position_xy, visibility
 

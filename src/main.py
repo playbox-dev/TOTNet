@@ -14,9 +14,12 @@ from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
 from model.motion_model import build_motion_model, post_process
 from model.motion_model_light import build_motion_model_light
+from model.motion_model_light_v2 import build_motion_model_lightv2
 from model.motion_model_v3 import build_motion_model_light_opticalflow
 from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
+from model.sequential_model import build_sequential_model
+from model.monoTrack import build_monoTrack
 from model.model_utils import make_data_parallel, get_num_parameters
 from losses_metrics.losses import Heatmap_Ball_Detection_Loss, focal_loss, Heatmap_Ball_Detection_Loss_Weighted
 from losses_metrics.metrics import heatmap_calculate_metrics, precision_recall_f1_tracknet, extract_coords, classification_metrics
@@ -118,6 +121,15 @@ def main_worker(configs):
     elif configs.model_choice == 'motion_light_opticalflow':
         print("Building Motion Light Optical Flow model...")
         model = build_motion_model_light_opticalflow(configs)
+    elif configs.model_choice == 'sequential':
+        print("Building Sequential Model")
+        model = build_sequential_model(configs)
+    elif configs.model_choice == 'motion_lightv2':
+        print("Building motion light v2")
+        model = build_motion_model_lightv2(configs)
+    elif configs.model_choice == 'monoTrack':
+        print("Building MonoTrack")
+        model = build_monoTrack(configs)
     else:
         raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
@@ -132,11 +144,12 @@ def main_worker(configs):
 
     # loss_func = Heatmap_Ball_Detection_Loss_Gaussian().to(configs.device)
     # loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
-    if configs.dataset_choice == 'badminton':
-        weighted_list = [1, 2, 2, 3]
-    else:
-        weighted_list = [1, 2, 2, 3]
-    loss_func = Heatmap_Ball_Detection_Loss_Weighted(weighted_list=weighted_list).to(configs.device)
+    if configs.loss_function == 'WBCE':
+        print("using WBCE for loss function")
+        loss_func = Heatmap_Ball_Detection_Loss_Weighted(weighted_list=configs.weighting_list).to(configs.device)
+    elif configs.loss_function == 'BCE':
+        print("using BCE for loss function")
+        loss_func = Heatmap_Ball_Detection_Loss().to(configs.device)
 
     if configs.is_master_node:
         num_parameters = get_num_parameters(model)
@@ -262,7 +275,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
         labels = labels.to(configs.device, dtype=torch.float)
         visibiltity = visibiltity.to(configs.device)
 
-        if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
+        if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
             # #for tracknet we need to rehsape the data
             B, N, C, H, W = batch_data.shape
             # Permute to bring frames and channels together
@@ -355,7 +368,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             labels = labels.to(configs.device, dtype=torch.float)
             visibility = visibility.to(configs.device)
 
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb':
+            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
                 # #for tracknet we need to rehsape the data
                 B, N, C, H, W = batch_data.shape
                 # Permute to bring frames and channels together

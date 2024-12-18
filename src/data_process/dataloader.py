@@ -220,9 +220,9 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
     train_transform = Compose([
         RandomColorJitter(p=0.3),
         Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
-        # Random_HFlip(p=0.2),
-        # Random_VFlip(p=0),
-        # Random_Rotate(rotation_angle_limit=5, p=0.1),
+        Random_HFlip(p=0.2),
+        Random_VFlip(p=0),
+        Random_Rotate(rotation_angle_limit=5, p=0.1),
         Random_Crop(max_reduction_percent=0.2, p=0.25),
         Resize(new_size=configs.img_size, p=necessary_prob),
         Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
@@ -390,13 +390,13 @@ if __name__ == '__main__':
     configs.img_size = (720, 1280)
     configs.interval = 1
     configs.num_frames = 5
-    configs.occluded_prob = 0
+    configs.occluded_prob = 0.1
     # configs.bidrection = True
-    configs.dataset_choice = 'tta'
+    configs.dataset_choice = 'tennis'
     # configs.event = True
     # configs.smooth_labelling = True
     
-    seed = 213221
+    seed = 123123
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

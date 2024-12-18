@@ -469,11 +469,22 @@ def get_all_detection_infor_tennis_sequence(game_list, configs):
                 for row in csv_reader:
                     ball_annos.append(row)
             
+            # Build a dictionary to easily map frame indices to annotations
+            frame_to_ball = {
+                int(row['file name'][:4]): {
+                    'x': int(row['x-coordinate']) if row['x-coordinate'] else -1,
+                    'y': int(row['y-coordinate']) if row['y-coordinate'] else -1,
+                    'visibility': int(row['visibility']) if row['visibility'] else -1,
+                    'status': int(row['status']) if row['status'] else -1
+                }
+                for row in ball_annos
+            }
+            
             for row in ball_annos:
                 file_name = row['file name']  # Assuming `file_name` is a column in the CSV
-                visibility = int(row['visibility']) if row['visibility'] else -1  # Convert visibility to integer
-                x = int(row['x-coordinate']) if row['x-coordinate'] else -1  # Default to -1 if empty Convert x-coordinate to integer
-                y = int(row['y-coordinate']) if row['y-coordinate'] else -1  # Default to -1 if empty 
+                visibility = int(row['visibility']) if row['visibility'] else -1
+                x = int(row['x-coordinate']) if row['x-coordinate'] else -1
+                y = int(row['y-coordinate']) if row['y-coordinate'] else -1
                 status = int(row['status']) if row['status'] else -1
 
                 # Extract the first four characters from file_name and convert to an integer
@@ -492,28 +503,34 @@ def get_all_detection_infor_tennis_sequence(game_list, configs):
                         for i in range(num_frames + 1)
                     ]
 
-
                 img_path_list = []
+                ball_positions = []  # List to store ball positions for all frames
                 for idx in sub_ball_frame_indices:
                     img_path = os.path.join(clip_dir, f'{idx:04d}.jpg')
                     img_path_list.append(img_path)
-                
+                    
+                    # Add ball position for the corresponding frame
+                    if idx in frame_to_ball:
+                        ball_info = frame_to_ball[idx]
+                        ball_positions.append([np.array([ball_info['x'], ball_info['y']], dtype=int), ball_info['visibility'], ball_info['status']])
+                    else:
+                        # If no annotation is found for this frame, append a placeholder
+                        ball_positions.append([[-1, -1], -1, -1])
+
                 # Check if any valid frames were found
                 if not img_path_list:
                     print(f"No valid frames found for event at frame {ball_frameidx}.")
                     continue
 
-
-                ball_position = np.array([x, y], dtype=int)
-                # if visibility!=2:
-                #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+                # Uncomment the following to skip events with invalid last frame labels
+                # if ball_positions[-1][2] != 2:
                 #     skipped_frame += 1
                 #     continue  # Skip this event if the last frame is invalid
                
                 events_infor.append(img_path_list)
-                events_labels.append([ball_position, visibility, status])
+                events_labels.append(ball_positions)
 
-    print(f"{skipped_frame} skipped frame due to due to invalid last label")
+    print(f"{skipped_frame} skipped frames due to invalid last label")
 
     return events_infor, events_labels
 
@@ -683,7 +700,10 @@ def train_val_data_separation(configs):
                                                                                                             random_state=configs.seed,
                                                                                                             )
     elif configs.dataset_choice == 'tennis':
-        events_infor, events_labels = get_all_detection_infor_tennis(configs.tennis_train_game_list, configs)
+        if configs.sequential:
+            events_infor, events_labels = get_all_detection_infor_tennis_sequence(configs.tennis_train_game_list, configs)
+        else:
+            events_infor, events_labels = get_all_detection_infor_tennis(configs.tennis_train_game_list, configs)
         if configs.no_val:
             train_events_infor = events_infor
             train_events_labels = events_labels
@@ -738,8 +758,17 @@ def get_visibility_distribution(events_labels):
     Returns:
         dict: A dictionary with visibility levels as keys and their counts as values.
     """
-    # Extract visibility values
-    visibility_values = [label[1] for label in events_labels]
+    visibility_values = []
+    for label in events_labels:
+        if isinstance(label[-1], (list, tuple)) and len(label[-1]) > 1:
+            # If the last element is a list/tuple with more than one element
+            visibility_values.append(label[-1][1])
+        elif isinstance(label, (list, tuple)) and len(label) > 1:
+            # Otherwise, use the second element if the label itself is a list/tuple
+            visibility_values.append(label[1])
+        else:
+            # Handle cases where visibility is not found
+            visibility_values.append(-1)  # Default or placeholder value
     
     # Count occurrences of each visibility level
     visibility_distribution = Counter(visibility_values)
@@ -752,11 +781,14 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tta'
+    configs.dataset_choice ='tennis'
     # configs.event = True
     # configs.bidirect = True
+    configs.sequential = True
 
+   
 
+    
     train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
     test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)

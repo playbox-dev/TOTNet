@@ -6,8 +6,8 @@
 
 python test.py \
   --working-dir '../' \
-  --saved_fn 'normal_tracking_288_512_motion_light_opticalflow_tt(5)' \
-  --model_choice 'motion_light_opticalflow'  \
+  --saved_fn 'tracking_288_512_monoTrack_tt(5)' \
+  --model_choice 'monoTrack'  \
   --gpu_idx 0   \
   --batch_size 8   \
   --img_size 288 512    \
@@ -16,7 +16,7 @@ python test.py \
   --occluded_prob 0 \
   --dataset_choice 'tt' \
   --ball_size 5 \
-  --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_opticalflow_tt(5)/normal_tracking_288_512_motion_light_opticalflow_tt(5)_best.pth' \
+  --pretrained_path '../checkpoints/tracking_288_512_monoTrack_tt(5)/tracking_288_512_monoTrack_tt(5)_best.pth' \
 
 
 # deformable 
