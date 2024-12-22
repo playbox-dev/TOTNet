@@ -117,6 +117,7 @@ def main_worker(gpu_idx, configs):
     # print(f"number of batches in test is {len(val_loader)}")
     # test(val_loader, model, configs)
 
+ 
     test_loader = create_occlusion_test_dataloader(configs, configs.num_samples)
     print(f"number of batches in test is {len(test_loader)}")
     test(test_loader, model, configs)

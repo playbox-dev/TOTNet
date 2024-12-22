@@ -193,7 +193,7 @@ class Random_VFlip(object):
 
 
 class Random_Ball_Mask:
-    def __init__(self, mask_size=(20, 20), p=0.5, mask_type='mean', shapes=['rectangle', 'circle', 'ellipse']):
+    def __init__(self, target_frame, mask_size=(20, 20), p=0.5, mask_type='mean', shapes=['rectangle', 'circle', 'ellipse']):
         """
         Args:
             mask_size (tuple): Height and width of the mask area (blackout area).
@@ -201,6 +201,7 @@ class Random_Ball_Mask:
             mask_type (str): Type of mask ('zero', 'noise', 'mean').
             shapes (list of str): List of shapes to choose from ('rectangle', 'circle', 'ellipse').
         """
+        self.target_frame = target_frame
         self.mask_size = mask_size
         self.p = p
         self.mask_type = mask_type
@@ -222,7 +223,7 @@ class Random_Ball_Mask:
 
         for i, img in enumerate(imgs):
             if random.random() < self.p:
-                if i == len(imgs) - 1:
+                if i == self.target_frame:
                     x, y = int(ball_position_xy[0]), int(ball_position_xy[1])
                     visibility = 3
                 else:

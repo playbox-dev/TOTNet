@@ -741,9 +741,16 @@ def train_val_data_separation(configs):
             train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_test_split(events_infor,
                                                                                                             events_labels,
                                                                                                             shuffle=True,
-                                                                                                            test_size=configs.val_size,
+                                                                                                            test_size=0.3,
                                                                                                             random_state=configs.seed,
                                                                                                             )
+            val_events_infor, test_events_infor, val_events_labels, test_events_labels = train_test_split(val_events_infor,
+                                                                                                        val_events_labels,
+                                                                                                        shuffle=True,
+                                                                                                        test_size=0.5,
+                                                                                                        random_state=configs.seed,
+                                                                                                        )
+            return train_events_infor, val_events_infor, train_events_labels, val_events_labels, test_events_infor, test_events_labels
             
     return train_events_infor, val_events_infor, train_events_labels, val_events_labels
 
@@ -781,17 +788,18 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.num_frames = 5
     configs.interval = 1
-    configs.dataset_choice ='tennis'
+    configs.dataset_choice ='tta'
     # configs.event = True
     # configs.bidirect = True
-    configs.sequential = True
+    # configs.sequential = True
 
    
-
-    
-    train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
+    if configs.dataset_choice == 'tta':
+        train_events_infor, val_events_infor, train_events_labels, val_events_labels, test_events_infor, test_events_labels = train_val_data_separation(configs)
+    else:
+        train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
-    test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
+    # test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
     # print(len(test_events_infor))
 
     # dataset_type = 'test'

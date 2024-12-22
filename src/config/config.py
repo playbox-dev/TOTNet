@@ -105,7 +105,7 @@ def parse_configs():
     parser.add_argument('-wd', '--weight_decay', type=float, default=1e-5, metavar='WD',
                         help='weight decay (default: 1e-5)')
     parser.add_argument('--optimizer_type', type=str, default='adam', metavar='OPTIMIZER',
-                        help='the type of optimizer, it can be sgd or adam')
+                        help='the type of optimizer, it can be sgd or adam or adamw')
     parser.add_argument('--loss_function', type=str, default='WBCE',
                         help='the type of loss function, it can be BCE or WBCE')
     parser.add_argument('--lr_type', type=str, default='plateau', metavar='SCHEDULER',

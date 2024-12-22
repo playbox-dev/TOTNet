@@ -216,10 +216,10 @@ def create_normal_test_dataloader(configs):
 
 def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_prob=1.0):
     """Create dataloader for training and validation, with an option to use a subset of the data."""
-
+    target_frame = configs.num_frames//2 if configs.bidirect else configs.num_frames-1
     train_transform = Compose([
         RandomColorJitter(p=0.3),
-        Random_Ball_Mask(mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
+        Random_Ball_Mask(target_frame=target_frame,mask_size=(configs.img_size[0]//10,configs.img_size[0]//10), p=configs.occluded_prob),
         Random_HFlip(p=0.2),
         Random_VFlip(p=0),
         Random_Rotate(rotation_angle_limit=5, p=0.1),
@@ -228,9 +228,11 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
         Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
     ], p=1.)
 
-    
-    # Load train and validation data information
-    train_events_infor, val_events_infor, train_events_label, val_events_label = train_val_data_separation(configs)
+    if configs.dataset_choice == 'tta':
+        train_events_infor, val_events_infor, train_events_label, val_events_label, _, _= train_val_data_separation(configs)
+    else:
+        # Load train and validation data information
+        train_events_infor, val_events_infor, train_events_label, val_events_label = train_val_data_separation(configs)
 
     if configs.dataset_choice == 'tt':
         # Create train dataset
@@ -331,6 +333,10 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
         test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
         test_dataset = Badminton_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
+    elif configs.dataset_choice == 'tta':
+        _, _, _, _, test_events_infor, test_events_labels = train_val_data_separation(configs)
+        test_dataset = TTA_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                 num_samples=configs.num_samples)
     test_sampler = None
 
     # If subset_size is provided, create a subset for training
@@ -387,27 +393,27 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (720, 1280)
+    configs.img_size = (1080, 1920)
     configs.interval = 1
     configs.num_frames = 5
-    configs.occluded_prob = 0.1
-    # configs.bidrection = True
-    configs.dataset_choice = 'tennis'
+    configs.occluded_prob = 1.0
+    # configs.bidirect = True
+    configs.dataset_choice = 'tta'
     # configs.event = True
     # configs.smooth_labelling = True
     
-    seed = 123123
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    # seed = 123123
+    # random.seed(seed)
+    # np.random.seed(seed)
+    # torch.manual_seed(seed)
+    # torch.cuda.manual_seed_all(seed)
 
     # Create Masked dataloaders 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs, necessary_prob=0)
     print('len train_dataloader: {}, val_dataloader: {}'.format(len(train_dataloader), len(val_dataloader)))
     
-    # test_dataloader = create_occlusion_test_dataloader(configs, configs.num_samples)
-    # print(f"len test_loader {len(test_dataloader)}")
+    test_dataloader = create_occlusion_test_dataloader(configs, configs.num_samples)
+    print(f"len test_loader {len(test_dataloader)}")
 
     frame_id = configs.num_frames-1
 
