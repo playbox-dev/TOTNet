@@ -20,6 +20,7 @@ from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
 from model.sequential_model import build_sequential_model
 from model.monoTrack import build_monoTrack
+from model.TTNet import build_TTNet
 from model.model_utils import make_data_parallel, get_num_parameters
 from losses_metrics.losses import Heatmap_Ball_Detection_Loss, focal_loss, Heatmap_Ball_Detection_Loss_Weighted
 from losses_metrics.metrics import heatmap_calculate_metrics, precision_recall_f1_tracknet, extract_coords, classification_metrics
@@ -131,6 +132,9 @@ def main_worker(configs):
     elif configs.model_choice == 'monoTrack':
         print("Building MonoTrack")
         model = build_monoTrack(configs)
+    elif configs.model_choice == 'TTNet':
+        print("Building TTNet")
+        model = build_TTNet(configs)
     else:
         raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
@@ -276,7 +280,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
         labels = labels.to(configs.device, dtype=torch.float)
         visibiltity = visibiltity.to(configs.device)
 
-        if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
+        if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack' or configs.model_choice == 'TTNet':
             # #for tracknet we need to rehsape the data
             B, N, C, H, W = batch_data.shape
             # Permute to bring frames and channels together
@@ -287,13 +291,7 @@ def train_one_epoch(train_loader, model, optimizer, loss_func, scaler, epoch, co
 
         with torch.autocast(device_type='cuda'):
             output_heatmap, cls_score = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap
-            if torch.isnan(output_heatmap[0]).any() or torch.isnan(output_heatmap[1]).any():
-                if logger is not None:
-                    logger.info("nan appeard here")
-                output_heatmap = [
-                    torch.nan_to_num(output_heatmap[0]),
-                    torch.nan_to_num(output_heatmap[1]),
-                ]
+    
         if cls_score == None:
             cls_loss = torch.tensor(1e-8, device=configs.device)
         else:
@@ -369,7 +367,7 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
             labels = labels.to(configs.device, dtype=torch.float)
             visibility = visibility.to(configs.device)
 
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
+            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack' or configs.model_choice == 'TTNet':
                 # #for tracknet we need to rehsape the data
                 B, N, C, H, W = batch_data.shape
                 # Permute to bring frames and channels together
@@ -379,13 +377,6 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
 
             with torch.autocast(device_type='cuda'):
                 output_heatmap, cls_score = model(batch_data) # output in shape ([B, W],[B, H]) if output heatmap, just raw logits
-                if torch.isnan(output_heatmap[0]).any() or torch.isnan(output_heatmap[1]).any():
-                    if logger is not None:
-                        logger.info("nan appeard here")
-                    output_heatmap = [
-                        torch.nan_to_num(output_heatmap[0]),
-                        torch.nan_to_num(output_heatmap[1]),
-                    ]
 
             if cls_score == None:
                 cls_loss = torch.tensor(1e-8, device=configs.device)

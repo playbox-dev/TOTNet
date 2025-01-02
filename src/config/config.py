@@ -102,8 +102,8 @@ def parse_configs():
                         help='minimum learning rate during training')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='momentum')
-    parser.add_argument('-wd', '--weight_decay', type=float, default=1e-5, metavar='WD',
-                        help='weight decay (default: 1e-5)')
+    parser.add_argument('-wd', '--weight_decay', type=float, default=0, metavar='WD',
+                        help='weight decay (default: 0)')
     parser.add_argument('--optimizer_type', type=str, default='adam', metavar='OPTIMIZER',
                         help='the type of optimizer, it can be sgd or adam or adamw')
     parser.add_argument('--loss_function', type=str, default='WBCE',

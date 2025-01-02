@@ -7,8 +7,8 @@
 
 
 # torchrun --nproc_per_node=2 main.py     \
-#     --num_epochs 20   \
-#     --saved_fn 'tracking_288_512_monoTrack_TTA(5)'   \
+#     --num_epochs 30   \
+#     --saved_fn 'tracking_288_512_tracknetv2_epoch_30_TTA(5)'   \
 #     --interval 1   \
 #     --num_frames 5  \
 #     --lr 1e-3 \
@@ -22,18 +22,18 @@
 #     --multiprocessing_distributed \
 #     --distributed \
 #     --dataset_choice 'tta' \
-#     --model_choice 'monoTrack'  \
+#     --model_choice 'tracknetv2'  \
 #     --occluded_prob 0 \
 #     --ball_size 4 \
 #     --no_test   \
 #     --val-size 0.2 \
-#     --pretrained_path '../checkpoints/normal_tracking_288_512_monoTrack_tt(5)/normal_tracking_288_512_monoTrack_tt(5)_best.pth' \
+#     --pretrained_path '../checkpoints/normal_tracking_288_512_tracknetv2_tt(5)/normal_tracking_288_512_tracknetv2_tt(5)_best.pth' \
 
 
 torchrun --nproc_per_node=2 main.py     \
-    --num_epochs 20   \
-    --saved_fn 'tracking_288_512_motion_light_opticalflow_TTA(5)'   \
-    --num_frames 5  \
+    --num_epochs 30   \
+    --saved_fn 'tracking_288_512_motion_light_tennis(3)'   \
+    --num_frames 3  \
     --optimizer_type adamw  \
     --lr 5e-4 \
     --loss_function WBCE  \
@@ -45,14 +45,14 @@ torchrun --nproc_per_node=2 main.py     \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --distributed \
-    --dataset_choice 'tta' \
+    --dataset_choice 'tennis' \
     --weighting_list 1 2 2 3   \
-    --model_choice 'motion_light_opticalflow'  \
+    --model_choice 'motion_light'  \
     --occluded_prob 0.1 \
     --ball_size 4 \
     --val-size 0.2 \
     --no_test   \
-    --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_opticalflow_tt(5)/normal_tracking_288_512_motion_light_opticalflow_tt(5)_best.pth' \
+    # --pretrained_path '../checkpoints/normal_tracking_288_512_motion_light_tt(5)/normal_tracking_288_512_motion_light_tt(5)_best.pth' \
 
 
 # torchrun --nproc_per_node=2 main.py     \
@@ -76,6 +76,28 @@ torchrun --nproc_per_node=2 main.py     \
 #     --ball_size 4 \
 #     --no_test   \
 #     --val-size 0.2 \
+
+
+# torchrun --nproc_per_node=2 main.py     \
+#     --num_epochs 50   \
+#     --saved_fn 'tracking_288_512_TTNet_sigmoid_tta(5)'   \
+#     --num_frames 5  \
+#     --loss_function BCE  \
+#     --optimizer_type adam  \
+#     --lr 1e-4 \
+#     --img_size 128 320 \
+#     --batch_size 16 \
+#     --print_freq 100 \
+#     --dist_url 'env://' \
+#     --dist_backend 'nccl' \
+#     --multiprocessing_distributed \
+#     --distributed \
+#     --dataset_choice 'tta' \
+#     --model_choice 'TTNet'  \
+#     --ball_size 4 \
+#     --no_test   \
+#     --val-size 0.2 \
+#     # --pretrained_path '../checkpoints/tracking_288_512_TTNet_tennis(5)/tracking_288_512_TTNet_tennis(5)_epoch_30.pth' \
 
 
 # single node single gpu, train data total length

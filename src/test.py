@@ -23,6 +23,7 @@ from model.motion_model_light import build_motion_model_light
 from model.motion_model_v3 import build_motion_model_light_opticalflow
 from model.motion_model_light_v2 import build_motion_model_lightv2
 from model.monoTrack import build_monoTrack
+from model.TTNet import build_TTNet
 from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap, save_batch_optical_flow_visualization
@@ -99,6 +100,9 @@ def main_worker(gpu_idx, configs):
     elif configs.model_choice == 'monoTrack':
         print("Building MonoTrack")
         model = build_monoTrack(configs)
+    elif configs.model_choice == 'TTNet':
+        print("Building TTNet")
+        model = build_TTNet(configs)
     else:
         raise ValueError(f"Unknown model choice: {configs.model_choice}")
 
@@ -145,7 +149,7 @@ def test(test_loader, model, configs):
 
     # switch to evaluate mode
     model.eval()
-    start_time = time.perf_counter()  # Start timing
+
     with torch.no_grad():
         for batch_idx, (batch_data, (_, labels, visibility, _)) in enumerate(tqdm(test_loader)):
             print(f'\n===================== batch_idx: {batch_idx} ================================')
@@ -157,7 +161,7 @@ def test(test_loader, model, configs):
 
 
             # Compute output
-            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack':
+            if configs.model_choice == 'tracknet' or  configs.model_choice == 'tracknetv2' or configs.model_choice == 'wasb' or configs.model_choice == 'monoTrack' or configs.model_choice == 'TTNet':
                 # #for tracknet we need to rehsape the data
                 B, N, C, H, W = batch_data.shape
                 # Permute to bring frames and channels together
@@ -165,8 +169,11 @@ def test(test_loader, model, configs):
                 # Reshape to combine frames into the channel dimension
                 batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
 
-           
+            start_time = time.perf_counter()  # Start timing
             output_heatmap, _ = model(batch_data.float())
+            end_time = time.perf_counter()  # End timing
+            
+            total_time += end_time - start_time  # Accumulate time
 
             mse, rmse, _, _ = heatmap_calculate_metrics(output_heatmap, labels)
             post_processed_coords = extract_coords(output_heatmap)
@@ -207,9 +214,7 @@ def test(test_loader, model, configs):
             recall_overall.update(recall)
             f1_overall.update(f1)
 
-    end_time = time.perf_counter()  # End timing
 
-    total_time += end_time - start_time  # Accumulate time
     total_frames = len(test_loader)*batch_size
 
     fps = total_frames / total_time if total_time > 0 else 0

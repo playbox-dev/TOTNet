@@ -393,12 +393,12 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (1080, 1920)
+    configs.img_size = (128, 320)
     configs.interval = 1
     configs.num_frames = 5
-    configs.occluded_prob = 1.0
+    configs.occluded_prob = 0
     # configs.bidirect = True
-    configs.dataset_choice = 'tta'
+    configs.dataset_choice = 'tennis'
     # configs.event = True
     # configs.smooth_labelling = True
     

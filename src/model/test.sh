@@ -10,4 +10,5 @@
 # python tracknet.py
 # python mamba_model.py  --model_choice 'mamba'
 # python two_stream_network.py --model_choice 'two_stream_model'
-python sequential_model.py --model_choice 'motion'
+# python sequential_model.py --model_choice 'motion'
+python TTNet.py --model_choice 'motion'
