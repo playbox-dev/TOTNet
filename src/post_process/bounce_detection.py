@@ -20,7 +20,6 @@ class Bounce_Detection:
         :return: True if the point is inside the table, False otherwise.
         """
         # Create a mask for the table polygon
-        # Check if the point is inside the mask
         return self.table_mask[point[1], point[0]] == 1
 
     def bounce_detection(self, ball_coordinates):
@@ -51,6 +50,57 @@ class Bounce_Detection:
                     bounces.append(i)
 
         return bounces
+    
+
+    def detect_bounce(self, ball_coordinates, window_size=5, x_smooth_threshold=5, y_smooth_threshold=10):
+        """
+        Detect bounces based on ball trajectory (X and Y coordinates).
+
+        :param ball_coordinates: List of tuples [(x1, y1), (x2, y2), ...] representing ball positions over time.
+        :param window_size: Number of points to analyze in the sliding window.
+        :param x_smooth_threshold: Maximum allowable X deviation for smooth motion.
+        :param y_smooth_threshold: Maximum allowable deviation from parabolic fit for Y motion.
+        :return: List of indices where bounces are detected.
+        """
+        bounces = []
+
+        if len(ball_coordinates) < window_size:
+            return bounces  # Not enough points for analysis
+
+        for i in range(window_size, len(ball_coordinates)):
+            if self.point_in_table(ball_coordinates[i]):
+                # Extract the sliding window
+                window = ball_coordinates[i - window_size:i]
+                x_coords = [pos[0] for pos in window]
+                y_coords = [pos[1] for pos in window]
+
+                # Fit a parabola to Y-coordinates: y = ax^2 + bx + c
+                x_indices = np.arange(len(y_coords))
+                coefficients = np.polyfit(x_indices, y_coords, 2)
+                a, b, c = coefficients
+
+                # Find the vertex of the parabola
+                vertex_x = -b / (2 * a)
+                vertex_y = a * vertex_x**2 + b * vertex_x + c
+
+                # Ensure the vertex is within the current window
+                if 0 <= vertex_x < len(y_coords):
+                    # Check if the Y motion is smooth (close to the parabolic fit)
+                    y_fit = a * x_indices**2 + b * x_indices + c
+                    y_deviation = np.max(np.abs(np.array(y_coords) - y_fit))
+
+                    # Check if the X motion is smooth
+                    x_diff = np.diff(x_coords)
+                    x_deviation = np.max(np.abs(x_diff - np.mean(x_diff)))
+
+                    if y_deviation < y_smooth_threshold and x_deviation < x_smooth_threshold:
+                        # Detect a bounce at the vertex
+                        bounce_index = i - window_size + int(round(vertex_x))
+                        bounces.append(bounce_index)
+
+        return bounces
+    
+
 
 # Example usage
 if __name__ == "__main__":

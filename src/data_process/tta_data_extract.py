@@ -9,9 +9,8 @@ def make_folder(folder_path):
 
 def extract_images_from_videos(video_path, out_images_dir):
     video_fn = os.path.basename(video_path)[:-4]
-    sub_images_dir = os.path.join(out_images_dir, video_fn)
 
-    make_folder(sub_images_dir)
+    make_folder(out_images_dir)
 
     video_cap = cv2.VideoCapture(video_path)
     if not video_cap.isOpened():
@@ -31,7 +30,7 @@ def extract_images_from_videos(video_path, out_images_dir):
             print(f"Warning: Failed to read frame {frame_idx} from video {video_path}")
             break
 
-        image_path = os.path.join(sub_images_dir, f'img_{frame_idx:06d}.jpg')
+        image_path = os.path.join(out_images_dir, f'img_{frame_idx:06d}.jpg')
         if os.path.isfile(image_path):
             # Image already exists, skip writing but continue extracting
             print(f"Frame {frame_idx} already exists. Skipping...")
@@ -50,11 +49,19 @@ def extract_images_from_videos(video_path, out_images_dir):
 
 if __name__ == '__main__':
     dataset_dir = '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset'
+    game_name = '24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA'
     for dataset_type in ['training', 'test']:
-        video_dir = os.path.join(dataset_dir, dataset_type, 'videos')
-        out_images_dir = os.path.join(dataset_dir, dataset_type, 'images')
-
-        video_paths = glob(os.path.join(video_dir, '*.MP4'))
+        # Construct paths
+        video_dir = os.path.join(dataset_dir, dataset_type, 'videos')  # Directory for videos
+        game_dir = os.path.join(video_dir, game_name)  # Replace 'game_name' with the actual game folder name or variable
         
-        for video_idx, video_path in enumerate(video_paths):
-            extract_images_from_videos(video_path, out_images_dir)
+        for video_file in os.listdir(game_dir):
+            video_name = os.path.splitext(video_file)[0]
+            out_images_dir = os.path.join(dataset_dir, dataset_type, 'images', game_name, video_name)  # Directory for images
+            video_path = os.path.join(game_dir, video_file)
+            if video_file.lower().endswith(('.mp4', '.avi', '.mkv')):  # Add other formats if needed
+                # print(video_path)
+                # print(out_images_dir)
+                extract_images_from_videos(video_path, out_images_dir)
+        
+       

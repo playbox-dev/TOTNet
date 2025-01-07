@@ -1,5 +1,64 @@
 import torch
 import numpy as np
+import csv
+import os
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+import csv
+import os
+from sklearn.metrics import precision_score, recall_score, f1_score
+
+def bounce_metrics(ball_positions, csv_file_path, frame_tolerance=5):
+    """
+    Calculate bounce detection metrics (precision, recall, F1-score) based on predicted and actual bounce frames.
+
+    Args:
+        ball_positions (list): List of tuples, where each tuple is (frame_id, (x, y)) representing
+                               the frame ID and ball coordinates.
+        csv_file_path (str): Path to the CSV file containing ground truth bounce information.
+        frame_tolerance (int): The allowed tolerance (in frames) to consider a bounce as correct.
+
+    Returns:
+        dict: A dictionary containing precision, recall, and F1-score.
+    """
+    # Get all predicted frame IDs from ball_positions
+    predict_frame_list = [frame for frame, _ in ball_positions]
+
+    # Get all actual bounce frame IDs from the CSV file
+    actual_frame_list = []
+    with open(csv_file_path, mode='r') as csv_file:
+        csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+        for row in csv_reader:
+            file_name = row['img']
+            image_name = os.path.basename(file_name)  # Get image name
+            ball_frameidx = int(image_name[4:10])  # Extract the frame index from the image name
+            status_mapping = {'Empty': 0, 'Bounce': 1}
+            status = status_mapping.get(row.get('event-type'), 2)
+            if status == 1:
+                actual_frame_list.append(ball_frameidx)
+
+    # Match predicted frames to actual frames within tolerance
+    matched_frames = set()
+    for predicted_frame in predict_frame_list:
+        for actual_frame in actual_frame_list:
+            if abs(predicted_frame - actual_frame) <= frame_tolerance:
+                matched_frames.add(actual_frame)
+                break
+
+    # Calculate metrics
+    y_true = [1 if frame in actual_frame_list else 0 for frame in range(max(max(predict_frame_list, default=0), max(actual_frame_list, default=0)) + 1)]
+    y_pred = [1 if frame in predict_frame_list else 0 for frame in range(len(y_true))]
+
+    precision = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1
+    }
+
 
 
 def extract_coords(pred_heatmap):
