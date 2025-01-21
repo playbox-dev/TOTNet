@@ -10,6 +10,8 @@ import cv2
 from sklearn.model_selection import train_test_split
 import torch
 import numpy as np
+import torch.nn.functional as F
+
 
 sys.path.append('../')
 
@@ -614,9 +616,12 @@ def get_all_detection_infor_tta(configs, dataset_type):
     events_labels = []
     skipped_frame = 0
 
-    for match_name in configs.tta_match_list:
+    match_list = configs.tta_training_match_list if dataset_type == 'training' else configs.tta_test_match_list
+
+    for match_name in match_list:
         ball_annos_dir = os.path.join(annos_dir, match_name)
         match_image_dir = os.path.join(images_dir, match_name)
+  
         for game in os.listdir(match_image_dir):
             game_annos_path = os.path.join(ball_annos_dir, game, 'labels.csv')
             game_image_path = os.path.join(match_image_dir, game)
@@ -637,7 +642,7 @@ def get_all_detection_infor_tta(configs, dataset_type):
                 image_name = os.path.basename(file_name)  # get image name 
                 visibility = int(row.get('visibility', [0])[0]) if row.get('visibility') and len(row['visibility']) > 0 else 0
                 status_mapping = {'Empty': 0, 'Bounce': 1}
-                status = status_mapping.get(row.get('event-type'), 2)
+                status = status_mapping.get(row.get('event-type'), 0)
 
                 ball_annotation = row['kp-1']
                 if ball_annotation == '':
@@ -687,12 +692,101 @@ def get_all_detection_infor_tta(configs, dataset_type):
 
     return events_infor, events_labels
 
+def get_event_detection_infor_tta(configs, dataset_type):
+    num_frames = configs.num_frames - 1
+    annos_dir = os.path.join(configs.tta_dataset_dir, dataset_type, 'annotations')
+    images_dir = os.path.join(configs.tta_dataset_dir, dataset_type, 'images')
+    events_infor = []
+    events_labels = []
+    skipped_frame = 0
+
+    match_list = configs.tta_training_match_list if dataset_type == 'training' else configs.tta_test_match_list
+
+    for match_name in match_list:
+        ball_annos_dir = os.path.join(annos_dir, match_name)
+        match_image_dir = os.path.join(images_dir, match_name)
+  
+        for game in os.listdir(match_image_dir):
+            game_annos_path = os.path.join(ball_annos_dir, game, 'labels.csv')
+            game_image_path = os.path.join(match_image_dir, game)
+            
+            # Load ball annotations from CSV
+            ball_annos = []
+            try:
+                with open(game_annos_path, mode='r') as csv_file:
+                    csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
+                    for row in csv_reader:
+                        ball_annos.append(row)
+            except FileNotFoundError:
+                print(f"File not found: {game_annos_path}. Skipping...")
+                continue
+            
+            for row in ball_annos:
+                file_name = row['img']
+                image_name = os.path.basename(file_name)  # get image name 
+                visibility = int(row.get('visibility', [0])[0]) if row.get('visibility') and len(row['visibility']) > 0 else 0
+                status_mapping = {'Empty': 0, 'Bounce': 1}
+                status = status_mapping.get(row.get('event-type'), 0)
+
+                ball_annotation = row['kp-1']
+                if ball_annotation == '':
+                    x = 0
+                    y = 0
+                else:
+                    ball_annotation = ast.literal_eval(ball_annotation)[0]
+                    x = int(ball_annotation['x'] * ball_annotation['original_width'] / 100)  # Convert to pixel
+                    y = int(ball_annotation['y'] * ball_annotation['original_height'] / 100)  # Convert to pixel
+                
+                ball_frameidx = int(image_name[4:10])
+                # Create frame indices with the correct interval, with the key frame as the last frame
+                if configs.bidirect:
+                    middle_frame = num_frames // 2  # Middle frame index for bidirectional setting
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (middle_frame - i)  # Adjust to have the middle as key frame
+                        for i in range(num_frames + 1)
+                    ]
+                else:
+                    sub_ball_frame_indices = [
+                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                        for i in range(num_frames + 1)
+                    ]
+            
+                img_path_list = []
+                for idx in sub_ball_frame_indices:
+                    img_path = os.path.join(game_image_path, f'img_{idx:06d}.jpg')
+                    img_path_list.append(img_path)
+                
+                # Check if any valid frames were found
+                if not img_path_list:
+                    print(f"No valid frames found for event at frame {ball_frameidx}.")
+                    continue
+                    
+                # if visibility!=3:
+                #     # print(f"Skipping event at frame {ball_frameidx} due to invalid last label.")
+                #     skipped_frame += 1
+                #     continue  # Skip this event if the last frame is invalid
+                
+
+                ball_position = np.array([x, y], dtype=int)
+                
+                if status == 1 and dataset_type=='training':
+                    for _ in range(5):
+                        events_infor.append(img_path_list)
+                        events_labels.append([ball_position, visibility, status])
+                else:
+                    events_infor.append(img_path_list)
+                    events_labels.append([ball_position, visibility, status])
+
+    print(f"{skipped_frame} skipped frame due to due to invalid last label")
+
+    return events_infor, events_labels
 
 
 def train_val_data_separation(configs):
     """Seperate data to training and validation sets"""
+    dataset_type = 'training'
     if configs.dataset_choice == 'tt':
-        dataset_type = 'training'
+       
         if configs.event == True:
             events_infor, events_labels = get_events_infor_noseg(configs.train_game_list, configs, dataset_type)
         else:
@@ -742,7 +836,10 @@ def train_val_data_separation(configs):
                                                                                                             random_state=configs.seed,
                                                                                                             )
     elif configs.dataset_choice == 'tta':
-        events_infor, events_labels = get_all_detection_infor_tta(configs, 'training')
+        if configs.event == True:
+            events_infor, events_labels = get_event_detection_infor_tta(configs, 'training')
+        else:
+            events_infor, events_labels = get_all_detection_infor_tta(configs, 'training')
         if configs.no_val:
             train_events_infor = events_infor
             train_events_labels = events_labels
@@ -752,16 +849,9 @@ def train_val_data_separation(configs):
             train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_test_split(events_infor,
                                                                                                             events_labels,
                                                                                                             shuffle=True,
-                                                                                                            test_size=0.3,
+                                                                                                            test_size=configs.val_size,
                                                                                                             random_state=configs.seed,
                                                                                                             )
-            val_events_infor, test_events_infor, val_events_labels, test_events_labels = train_test_split(val_events_infor,
-                                                                                                        val_events_labels,
-                                                                                                        shuffle=True,
-                                                                                                        test_size=0.5,
-                                                                                                        random_state=configs.seed,
-                                                                                                        )
-            return train_events_infor, val_events_infor, train_events_labels, val_events_labels, test_events_infor, test_events_labels
             
     return train_events_infor, val_events_infor, train_events_labels, val_events_labels
 
@@ -821,20 +911,18 @@ if __name__ == '__main__':
     configs.num_frames = 5
     configs.interval = 1
     configs.dataset_choice ='tta'
-    # configs.event = True
-    # configs.bidirect = True
+    configs.event = True
+    configs.bidirect = True
+    configs.test = True
     # configs.sequential = True
 
    
-    if configs.dataset_choice == 'tta':
-        train_events_infor, val_events_infor, train_events_labels, val_events_labels, test_events_infor, test_events_labels = train_val_data_separation(configs)
-    else:
-        train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
+    train_events_infor, val_events_infor, train_events_labels, val_events_labels = train_val_data_separation(configs)
     print(len(train_events_infor), len(train_events_labels), len(val_events_infor), len(val_events_labels))
-    # test_events_infor, test_events_labels = get_all_detection_infor_badminton(configs.badminton_test_game_list, configs)
-    # print(len(test_events_infor))
+    test_events_infor, test_events_labels = get_event_detection_infor_tta(configs, 'test')
+    print(len(test_events_infor))
 
-    # dataset_type = 'test'
+    dataset_type = 'test'
     # if configs.event:
     #     test_events_infor, test_events_labels = get_events_infor_noseg(configs.test_game_list, configs, dataset_type)
     # else:

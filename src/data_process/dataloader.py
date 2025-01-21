@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Subset
 sys.path.append('../')
 
 from data_process.dataset import PIDA_dataset, Masked_Dataset, Normal_Dataset, Occlusion_Dataset, Tennis_Dataset, Event_Dataset, Badminton_Dataset, TTA_Dataset
-from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis, get_events_infor_noseg, get_all_detection_infor_badminton
+from data_process.data_utils import get_all_detection_infor, train_val_data_separation, get_all_detection_infor_tennis, get_events_infor_noseg, get_all_detection_infor_badminton, get_all_detection_infor_tta, get_event_detection_infor_tta
 from data_process.transformation import Compose, Random_Crop, Resize, Normalize, Random_Rotate, Random_HFlip, Random_VFlip, Random_Ball_Mask, RandomColorJitter
 
 
@@ -228,11 +228,9 @@ def create_occlusion_train_val_dataloader(configs, subset_size=None, necessary_p
         Normalize(num_frames_sequence=configs.num_frames, p=necessary_prob),
     ], p=1.)
 
-    if configs.dataset_choice == 'tta':
-        train_events_infor, val_events_infor, train_events_label, val_events_label, _, _= train_val_data_separation(configs)
-    else:
-        # Load train and validation data information
-        train_events_infor, val_events_infor, train_events_label, val_events_label = train_val_data_separation(configs)
+ 
+    # Load train and validation data information
+    train_events_infor, val_events_infor, train_events_label, val_events_label = train_val_data_separation(configs)
 
     if configs.dataset_choice == 'tt':
         # Create train dataset
@@ -334,9 +332,14 @@ def create_occlusion_test_dataloader(configs, subset_size=None):
         test_dataset = Badminton_Dataset(test_events_infor, test_events_labels, transform=test_transform,
                                  num_samples=configs.num_samples)
     elif configs.dataset_choice == 'tta':
-        _, _, _, _, test_events_infor, test_events_labels = train_val_data_separation(configs)
-        test_dataset = TTA_Dataset(test_events_infor, test_events_labels, transform=test_transform,
-                                 num_samples=configs.num_samples)
+        if configs.event:
+            test_events_infor, test_events_labels = get_event_detection_infor_tta(configs, 'test')
+            test_dataset = TTA_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                    num_samples=configs.num_samples)
+        else:
+            test_events_infor, test_events_labels = get_all_detection_infor_tta(configs, 'test')
+            test_dataset = TTA_Dataset(test_events_infor, test_events_labels, transform=test_transform,
+                                    num_samples=configs.num_samples)
     test_sampler = None
 
     # If subset_size is provided, create a subset for training
@@ -393,7 +396,7 @@ if __name__ == '__main__':
     configs = parse_configs()
     configs.distributed = False  # For testing
     configs.batch_size = 1
-    configs.img_size = (128, 320)
+    configs.img_size = (288, 512)
     configs.interval = 1
     configs.num_frames = 5
     configs.occluded_prob = 0
@@ -402,11 +405,11 @@ if __name__ == '__main__':
     # configs.event = True
     # configs.smooth_labelling = True
     
-    # seed = 123123
-    # random.seed(seed)
-    # np.random.seed(seed)
-    # torch.manual_seed(seed)
-    # torch.cuda.manual_seed_all(seed)
+    seed = np.random.randint(0, 2**32)  # Generate a random integer seed
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     # Create Masked dataloaders 
     train_dataloader, val_dataloader, train_sampler = create_occlusion_train_val_dataloader(configs, necessary_prob=0)
@@ -418,18 +421,29 @@ if __name__ == '__main__':
     frame_id = configs.num_frames-1
 
     if configs.event == False:
-        batch_data, (masked_frameids, ball_xys, visability, status) = next(iter(train_dataloader))
+        batch_data, (masked_frameids, ball_xys, visibility, events) = next(iter(test_dataloader))
     else:
-        batch_data, (masked_frameids, ball_xys, target_events, event_classes) = next(iter(train_dataloader))
+        batch_data, (masked_frameids, ball_xys, visibility, events) = next(iter(train_dataloader))
+        print(f"Batch event shape is: {events.shape}, events are {events}")
+
     
     if configs.event or configs.bidirect:
         frame_id = configs.num_frames//2
+    
+    # Iterate through the train_dataloader to find events == [0, 1]
+    for batch_data, (masked_frameids, ball_xys, visibility, events) in train_dataloader:
+        if (visibility==3).all(dim=0).any():  # Check if any row matches [0, 1]
+            print("Found example with events == [0, 1]")
+            print(f"Batch Data Shape: {batch_data.shape}")
+            print(f"Events: {events}")
+            break
     # print(f"unique number of batch_data is {torch.unique(batch_data)}")
     # Check the shapes
     # print(f'ball frame is {frame_id}, print event is {event_classes}')
     print(f'Batch data shape: {batch_data.shape}')      # Expected: [B, N, C, H, W]
     print(f'Batch ball_xy shape: {ball_xys.shape}')  # Expected: [8, 2], 2 represents X and Y of the coordinaties 
     print(torch.unique(ball_xys))
+   
    
     # Select the first sample in the batch
     sample_data = batch_data[0]  # Shape: [B, C, H, W]

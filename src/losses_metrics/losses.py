@@ -319,6 +319,37 @@ def events_spotting_loss(pred_events, target_events, weights=(1, 3), epsilon=1e-
     
     return loss
 
+
+def focal_loss(pred_events, target_events, alpha=0.6, gamma=2.0, epsilon=1e-9):
+    """
+    Focal loss for imbalanced datasets.
+
+    Args:
+        pred_events (torch.Tensor): Predicted probabilities, shape [B, num_events].
+        target_events (torch.Tensor): Ground truth labels, shape [B, num_events].
+        alpha (float): Balancing factor for positive/negative classes.
+        gamma (float): Focusing parameter for hard examples.
+        epsilon (float): Small constant for numerical stability.
+
+    Returns:
+        torch.Tensor: Loss value (scalar).
+    """
+
+    # Clamp predictions to avoid log(0) or log(1)
+    pred_events = torch.clamp(pred_events, min=epsilon, max=1.0 - epsilon)
+
+    # Compute p_t (probability for the true class)
+    p_t = target_events * pred_events + (1 - target_events) * (1 - pred_events)
+
+    # Compute alpha_t (class weights)
+    alpha_t = target_events * alpha + (1 - target_events) * (1 - alpha)
+
+    # Compute focal loss
+    focal_loss = -alpha_t * ((1.0 - p_t) ** gamma) * torch.log(p_t)
+
+    # Return the mean loss
+    return focal_loss.mean()
+
 def generate_gaussian_map(width, target_x, sigma=0.5):
     """
     Generate a 1D Gaussian map.
@@ -351,41 +382,6 @@ def probability_loss(pred_probs, true_probs):
     return F.kl_div(pred_probs.log(), true_probs, reduction='batchmean')
 
 
-
-def focal_loss(pred_logits, labels, alpha=1.0, gamma=2.0, num_classes=3):
-    """
-    Focal loss for classification tasks.
-
-    Args:
-        pred_logits (tensor): Logits in shape [B, num_classes].
-        labels (tensor): Ground truth labels in shape [B].
-        alpha (float, optional): Balancing factor for the loss. Defaults to 1.0.
-        gamma (float, optional): Focusing parameter to down-weight easy examples. Defaults to 2.0.
-        num_classes (int): Number of classes in the classification task.
-
-    Returns:
-        torch.Tensor: Scalar loss value (mean over the batch).
-    """
-    # Convert logits to probabilities
-    pred_probs = F.softmax(pred_logits, dim=-1)  # [B, num_classes]
-    
-    # Ensure labels are 1D
-    labels = labels.squeeze(-1) if labels.dim() > 1 else labels  # [B]
-    
-    # One-hot encode the labels
-    labels_one_hot = F.one_hot(labels.long(), num_classes=num_classes).float()  # [B, num_classes]
-    
-    # Compute probabilities of true classes
-    pt = (pred_probs * labels_one_hot).sum(dim=1)  # [B]
-    
-    # Clamp pt for numerical stability
-    pt = torch.clamp(pt, min=1e-7, max=1.0)  # Avoid log(0)
-    
-    # Compute focal loss
-    loss = -alpha * (1 - pt) ** gamma * torch.log(pt)
-    
-    # Return mean loss over the batch
-    return loss.mean()
 
 def calculate_rmse_from_heatmap(output, labels, scale=None):
     """

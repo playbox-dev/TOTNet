@@ -2,7 +2,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --job-name=August_demo
-#SBATCH -w boromir
+###SBATCH -w boromir
 
 #tt video path 
 # /home/s224705071/github/TT/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/dataset/test/videos/test_1.mp4
@@ -27,14 +27,18 @@
 #     --pretrained_path '../checkpoints/tracking_288_512_motion_light_TTA(5)/tracking_288_512_motion_light_TTA(5)_best.pth' \
 
 
+nvidia-smi
+export NCCL_P2P_DISABLE=1
+
+
 ## TTA
 python work_flow.py \
     --gpu_idx 0   \
-    --model_choice 'motion_light_opticalflow' \
+    --model_choice 'motion_light' \
     --num_frames 5  \
     --dataset_choice tta \
-    --video_path '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/training/videos/Game_4.mp4' \
-    --pretrained_path '../checkpoints/tracking_288_512_motion_light_opticalflow_TTA(5)/tracking_288_512_motion_light_opticalflow_TTA(5)_best.pth' \
+    --video_path '../data/tta_dataset/test/videos/24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA/Game_3.mp4' \
+    --pretrained_path '../checkpoints/tracking_288_512_motion_light_TTA(5)_new_data/tracking_288_512_motion_light_TTA(5)_new_data_best.pth' \
     --save_demo_output    \
     --output_format video \
 

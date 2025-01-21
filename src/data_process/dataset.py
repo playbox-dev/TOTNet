@@ -2,8 +2,10 @@ import sys
 import os
 import numpy as np
 import time
+import torch
 
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 import cv2
 
 sys.path.append('../')
@@ -417,6 +419,7 @@ class TTA_Dataset(Dataset):
         ball_xy = self.events_label[index][0]
         visibility = self.events_label[index][1]
         status = self.events_label[index][2]
+        one_hot_status = F.one_hot(torch.tensor(status), num_classes=2)
 
         imgs = []
         for img_path in img_path_list:
@@ -446,7 +449,7 @@ class TTA_Dataset(Dataset):
             i+=1
         
         image_list_np = np.array(image_list)
-        return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), visibility, status)
+        return image_list_np, (masked_frameid, np.array(ball_xy.astype(int)), visibility, one_hot_status)
 
 
 if __name__ == '__main__':

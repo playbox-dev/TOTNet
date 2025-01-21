@@ -358,30 +358,30 @@ def calculate_rmse_batched(pred_coords, label_coords):
     return mean_rmse.item()
 
 
-def classification_metrics(preds, labels, num_classes=4):
+def classification_metrics(preds, labels, num_classes=2):
     """
     Calculate accuracy, precision, recall, and F1-score for classification.
 
     Args:
-        preds (torch.Tensor): Predictions of shape [B, 3] (logits or probabilities).
-        labels (torch.Tensor): Ground truth of shape [B].
+        preds (torch.Tensor): Predictions of shape [B, 2] (logits or probabilities).
+        labels (torch.Tensor): Ground truth of shape [B, 2] (one-hot encoded).
         num_classes (int): Number of classes.
 
     Returns:
         dict: A dictionary containing accuracy, precision, recall, and F1-score.
     """
-    # Get predicted classes
-    _, predicted_classes = torch.max(preds, dim=1)  # [B]
-    labels = labels.squeeze(-1) if labels.dim() > 1 else labels  # [B]
+    # Convert one-hot encoded labels and predictions to class indices
+    predicted_classes = torch.argmax(preds, dim=1)  # Shape [B]
+    true_classes = torch.argmax(labels, dim=1)  # Shape [B]
 
     # Calculate accuracy
-    correct = (predicted_classes == labels).sum().item()
-    total = labels.size(0)
+    correct = (predicted_classes == true_classes).sum().item()
+    total = true_classes.size(0)
     accuracy = correct / total
 
     # Confusion matrix
     confusion_matrix = torch.zeros((num_classes, num_classes), device=preds.device)
-    for t, p in zip(labels, predicted_classes):
+    for t, p in zip(true_classes, predicted_classes):
         confusion_matrix[t.long(), p.long()] += 1
 
     # True positives, false positives, false negatives
@@ -404,6 +404,42 @@ def classification_metrics(preds, labels, num_classes=4):
         "precision": macro_precision,
         "recall": macro_recall,
         "f1_score": macro_f1
+    }
+
+
+
+def classification_metrics_class_1(preds, labels):
+    """
+    Calculate precision, recall, accuracy, and F1-score for class 1.
+
+    Args:
+        preds (torch.Tensor): Predictions of shape [B, 2] (logits or probabilities).
+        labels (torch.Tensor): Ground truth of shape [B, 2] (one-hot encoded).
+
+    Returns:
+        dict: A dictionary containing precision, recall, accuracy, and F1-score for class 1.
+    """
+    # Convert one-hot encoded labels and predictions to class indices
+    predicted_classes = torch.argmax(preds, dim=1)  # Shape [B]
+    true_classes = torch.argmax(labels, dim=1)  # Shape [B]
+
+    # Confusion matrix for class 1
+    true_positives = ((predicted_classes == 1) & (true_classes == 1)).sum().item()
+    false_positives = ((predicted_classes == 1) & (true_classes == 0)).sum().item()
+    false_negatives = ((predicted_classes == 0) & (true_classes == 1)).sum().item()
+    true_negatives = ((predicted_classes == 0) & (true_classes == 0)).sum().item()
+
+    # Precision, recall, F1-score, and accuracy for class 1
+    precision_1 = true_positives / (true_positives + false_positives + 1e-8)
+    recall_1 = true_positives / (true_positives + false_negatives + 1e-8)
+    f1_1 = 2 * (precision_1 * recall_1) / (precision_1 + recall_1 + 1e-8)
+    accuracy_1 = (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+
+    return {
+        "accuracy": accuracy_1,
+        "precision": precision_1,
+        "recall": recall_1,
+        "f1_score": f1_1,
     }
 
 

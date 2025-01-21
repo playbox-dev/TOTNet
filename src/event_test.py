@@ -12,8 +12,9 @@ sys.path.append('./')
 
 from data_process.dataloader import create_occlusion_test_dataloader, create_occlusion_train_val_dataloader
 from model.model_utils import make_data_parallel, get_num_parameters, load_pretrained_model
-from model.motion_model_v2 import build_motion_model
-from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics, post_process_event_prediction, PCE, SPCE
+from model.motion_model_light_event import build_motion_model_light
+from model.wasb_event import build_wasb
+from losses_metrics.metrics import heatmap_calculate_metrics, calculate_rmse, precision_recall_f1_tracknet, extract_coords, classification_metrics, classification_metrics_class_1
 from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap
 from config.config import parse_configs
@@ -62,7 +63,11 @@ def main_worker(gpu_idx, configs):
     configs.is_master_node = (not configs.distributed) or (
             configs.distributed and (configs.rank % configs.ngpus_per_node == 0))
 
-    model = build_motion_model(configs)
+    
+    if configs.model_choice == 'motion_light':
+        model = build_motion_model_light(configs)
+    elif configs.model_choice == 'wasb':
+        model = build_wasb(configs)
 
 
     model = make_data_parallel(model, configs)
@@ -92,8 +97,10 @@ def test(test_loader, model, configs):
     recall_overall = AverageMeter('Recall', '6.4f')
     f1_overall = AverageMeter('F1', '6.4f')
 
-    pce_overall = AverageMeter('PCE', ':6.4f')
-    spce_overall = AverageMeter('SPCE', ':6.4f')
+    cls_accuracy_overall = AverageMeter('Cls Accuracy', ':6.4f')
+    cls_precision_overall = AverageMeter('Cls Precision', ':6.4f')
+    cls_recall_overall = AverageMeter('Cls Recall', ':6.4f')
+    cls_f1_overall = AverageMeter('Cls F1', ':6.4f')
 
     # calculate fps rate
     total_time = 0
@@ -103,14 +110,19 @@ def test(test_loader, model, configs):
     model.eval()
     start_time = time.perf_counter()  # Start timing
     with torch.no_grad():
-        for batch_idx, (batch_data, (_, ball_xys, target_events, event_classes)) in enumerate(tqdm(test_loader)):
+        for batch_idx, (batch_data, (_, ball_xys, visibility, event_classes)) in enumerate(tqdm(test_loader)):
             print(f'\n===================== batch_idx: {batch_idx} ================================')
             batch_size = batch_data.size(0)
             batch_data = batch_data.to(configs.device)
-            num_frames = batch_data.size(1)
             ball_xys = ball_xys.to(configs.device)
-            target_events = target_events.to(configs.device)
             event_classes = event_classes.to(configs.device)
+
+            if configs.model_choice == 'wasb':
+                B, N, C, H, W = batch_data.shape
+                # Permute to bring frames and channels together
+                batch_data = batch_data.permute(0, 2, 1, 3, 4).contiguous()  # Shape: [B, C, N, H, W]
+                # Reshape to combine frames into the channel dimension
+                batch_data = batch_data.view(B, N * C, H, W)  # Shape: [B, N*C, H, W]
            
             output_heatmap, cls_score = model(batch_data.float())
 
@@ -120,29 +132,32 @@ def test(test_loader, model, configs):
             precision, recall, f1, accuracy = precision_recall_f1_tracknet(
                 post_processed_coords, ball_xys, distance_threshold=configs.ball_size
             )
+
+            cls_dict = classification_metrics_class_1(cls_score, event_classes)
+            cls_accuracy = cls_dict['accuracy']
+            cls_precision = cls_dict['precision']
+            cls_recall = cls_dict['recall']
+            cls_f1 = cls_dict['f1_score']
           
 
             # Update metrics for each sample by visibility
             for sample_idx in range(batch_size):
                
-                event_label = event_classes[sample_idx].item()  # Visibility label for this sample
-                target_event_label = target_events[sample_idx]
+                event_label = event_classes[sample_idx]  # Visibility label for this sample
+                true_class = torch.argmax(event_label).item()
                 label = ball_xys[sample_idx]
 
                 pred_coords = post_processed_coords[sample_idx]
                 pred_target = cls_score[sample_idx]
+                predicted_class = torch.argmax(pred_target).item()
 
                 x_pred, y_pred = pred_coords[0], pred_coords[1]
 
                 # Compute RMSE for this sample
                 sample_rmse = calculate_rmse(label[0], label[1], x_pred, y_pred)
 
-                pce, spce = PCE(pred_target, target_event_label), SPCE(pred_target, target_event_label)
-                pce_overall.update(pce)
-                spce_overall.update(spce)
-
                 print('Real Event {}, Predict Event {} - Ball Detection - \t Overall: \t (x, y) - org: ({}, {}), prediction = ({}, {}), rmse is {}'.format(
-                        target_event_label, pred_target, label[0].item(), label[1].item(), x_pred.item(), y_pred.item(), sample_rmse))
+                        true_class, predicted_class, label[0].item(), label[1].item(), x_pred.item(), y_pred.item(), sample_rmse))
 
 
             # Update overall metrics
@@ -151,6 +166,11 @@ def test(test_loader, model, configs):
             precision_overall.update(precision)
             recall_overall.update(recall)
             f1_overall.update(f1)
+
+            cls_accuracy_overall.update(cls_accuracy)
+            cls_precision_overall.update(cls_precision)
+            cls_recall_overall.update(cls_recall)
+            cls_f1_overall.update(cls_f1)
 
 
     end_time = time.perf_counter()  # End timing
@@ -166,7 +186,8 @@ def test(test_loader, model, configs):
     print(
         f"Overall Results: RMSE: {rmse_overall.avg:.4f}, Accuracy: {accuracy_overall.avg:.4f}, \n"
         f"Precision: {precision_overall.avg:.4f}, Recall: {recall_overall.avg:.4f}, F1: {f1_overall.avg:.4f}, \n"
-        f"PCE: {pce_overall.avg:.4f}, SPCE: {spce_overall.avg:.4f}\n"
+        f"Cls Accuracy: {cls_accuracy_overall.avg:.4f}, Cls Precision: {cls_precision_overall.avg:.4f}\n"
+        f"Cls Recall: {cls_recall_overall.avg:.4f}, Cls f1: {cls_f1_overall.avg:.4f}\n"
         f"Model fps rate: {fps:.0f}"
     )
 

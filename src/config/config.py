@@ -19,6 +19,8 @@ def parse_configs():
                     help='If true, use all data for training, no validation set')
     parser.add_argument('--no_test', action='store_true',
                         help='If true, dont evaluate the model on the test set')
+    parser.add_argument('--test', action='store_true',
+                        help='If true, dont oversampling the event')
     parser.add_argument('--val-size', type=float, default=0.2,
                     help='The size of validation set')
     parser.add_argument('--num_samples', type=int, default=None,
@@ -211,7 +213,8 @@ def parse_configs():
     configs.badminton_test_game_list = ['Test']
 
     configs.tta_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset')
-    configs.tta_match_list = ['24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN', '24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA']
+    configs.tta_training_match_list = ['24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN', '24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA']
+    configs.tta_test_match_list = ['24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA']
 
     make_folder(configs.checkpoints_dir)
     make_folder(configs.logs_dir)

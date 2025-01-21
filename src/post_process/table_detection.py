@@ -461,7 +461,7 @@ class Table_ball_transform:
 
 if __name__ == '__main__':
     output_folder = "/home/august/github/PhysicsInformedDeformableAttentionNetwork/results/demo/logs/output"
-    image = read_img("/home/august/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/images/img_000306.jpg")
+    image = read_img("/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/training/images/24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA/Game_1/img_000000.jpg")
     print(f"Image shape: {image.shape if image is not None else 'Image not loaded'}")
 
     # Save the images to the specified folder

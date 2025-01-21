@@ -59,7 +59,8 @@ def demo(configs):
     # image = read_img("/home/august/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/images/img_000000.jpg")
     # table_ball_transform = Table_ball_transform(output_folder=output_folder, table_image=image) 
     table_corners = [(734, 397), (1119, 399), (1150, 581), (742, 577)]
-    bounce_detection = Bounce_Detection(table_corners)
+    table_corners_game2 = [(724, 339), (1113, 335), (1214, 539), (783, 545)]
+    bounce_detection = Bounce_Detection(table_corners_game2)
     scaled_ball_queue = deque(maxlen=10)  # Queue to store the last 10 scaled_ball_pos
     ball_queue = deque(maxlen=10)
     ball_bounce_list = []
@@ -136,13 +137,13 @@ def demo(configs):
                 scaled_ball_queue.clear()
 
             # Check for bounces
-            bounces = bounce_detection.detect_bounce(list(scaled_ball_queue))
+            bounces = bounce_detection.detect_bounce_with_y_outliers(list(scaled_ball_queue))
             if bounces:
                 print(f"Bounces detected at positions: {bounces}, ball queue is {scaled_ball_queue}")
                 last_bounce_index = bounces[-1]
                 
                 # filter out bounces thats too close to each other
-                if not ball_bounce_list or frame_idx - ball_bounce_list[-1][0] > 10:
+                if not ball_bounce_list or frame_idx - ball_bounce_list[-1][0] > 5:
                     ball_bounce_pos = list(scaled_ball_queue)[last_bounce_index]
                     ball_bounce_list.append([frame_idx, ball_bounce_pos])
                     print(f"Frame {frame_idx}: Recorded bounce at {ball_bounce_pos}. Total bounces: {len(ball_bounce_list)}")
@@ -162,10 +163,10 @@ def demo(configs):
             if configs.show_image:
                 cv2.imshow('ploted_img.png', ploted_img)
                 time.sleep(0.01)
-            if configs.save_demo_output:
+            if configs.save_demo_output and bounces:
                 cv2.imwrite(os.path.join(configs.frame_dir, '{:06d}.jpg'.format(frame_idx)), ploted_img)
 
-            if count == 2000:
+            if count == 7000:
                 break
 
             frame_idx += 1
@@ -214,7 +215,7 @@ def plot_detection(img, ball_pos, events, bounces, scaled_ball_pos):
     return img
 
 
-def filter_bounces(ball_positions, frame_threshold=10):
+def filter_bounces(ball_positions, frame_threshold=5):
     """
     Filters bounces to ensure there are no multiple bounces detected within close frame ranges.
 
@@ -279,7 +280,7 @@ if __name__ == '__main__':
 
     bounce_results = bounce_metrics(
         ball_bounce_list,
-        "/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset/training/annotations/24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN/labels.csv"
+        "../data/tta_dataset/test/annotations/24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA/Game_3/labels.csv"
     )
     print(bounce_results)
 

@@ -99,12 +99,71 @@ class Bounce_Detection:
                         bounces.append(bounce_index)
 
         return bounces
+
+
+    def detect_bounce_with_y_outliers(self, ball_coordinates, method="zscore", threshold=2):
+        """
+        Detect bounces based on Y-coordinate outliers.
+
+        Args:
+            ball_coordinates (list): List of tuples [(x1, y1), (x2, y2), ...] representing ball positions over time.
+            method (str): Method to detect outliers. Options: "zscore", "iqr".
+            threshold (float): Threshold for detecting outliers.
+                - For "zscore", it represents the number of standard deviations.
+                - For "iqr", it represents the multiplier for the IQR range.
+
+        Returns:
+            list: Indices of detected bounces in the input ball_coordinates.
+        """
+        if not ball_coordinates:
+            return []  # No data to analyze
+
+        # Extract Y-coordinates from ball positions
+        y_coords = [pos[1] for pos in ball_coordinates]
+        y_coords = np.array(y_coords)
+
+        outlier_indices = []
+
+        if method == "zscore":
+            # Calculate mean and standard deviation
+            y_mean = np.mean(y_coords)
+            y_std = np.std(y_coords)
+
+            # Calculate z-scores
+            z_scores = (y_coords - y_mean) / y_std
+
+            # Identify indices where z-scores exceed the threshold
+            outlier_indices = np.where(np.abs(z_scores) > threshold)[0]
+
+        elif method == "iqr":
+            # Calculate Q1 (25th percentile) and Q3 (75th percentile)
+            q1 = np.percentile(y_coords, 25)
+            q3 = np.percentile(y_coords, 75)
+
+            # Calculate IQR (Interquartile Range)
+            iqr = q3 - q1
+
+            # Determine bounds for outliers
+            lower_bound = q1 - threshold * iqr
+            upper_bound = q3 + threshold * iqr
+
+            # Identify indices where Y-coordinates are outliers
+            outlier_indices = np.where((y_coords < lower_bound) | (y_coords > upper_bound))[0]
+
+        else:
+            raise ValueError("Invalid method. Choose 'zscore' or 'iqr'.")
+
+        return list(outlier_indices)
+
+
+
     
 
 
 # Example usage
 if __name__ == "__main__":
     table_corners = [(734, 397), (1119, 399), (1150, 581), (742, 577)]
+    table_corners_game2 = [(724, 339), (1113, 335), (1214, 539), (783, 545)]
     ball_detector = Bounce_Detection(table_corners)
 
     ball_positions = [(800, 350), (900, 450), (950, 500), (1000, 450), (1100, 400)]  # Example coordinates

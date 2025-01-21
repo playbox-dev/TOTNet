@@ -50,6 +50,7 @@ def main():
         random.seed(configs.seed)
         np.random.seed(configs.seed)
         torch.manual_seed(configs.seed)
+        torch.cuda.manual_seed_all(configs.seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
@@ -71,7 +72,7 @@ def main_worker(configs):
     configs.rank = int(os.environ["RANK"])
     configs.world_size = int(os.environ["WORLD_SIZE"])
     # Set the GPU for this process
-    configs.gpu_idx = configs.rank % torch.cuda.device_count()  # Map rank to available GPU
+    configs.gpu_idx = int(os.environ["LOCAL_RANK"])  # Rank within the current node
     configs.device = torch.device(f'cuda:{configs.gpu_idx}')
 
     print(f"Running on rank {configs.rank}, using GPU {configs.gpu_idx}")
@@ -137,8 +138,21 @@ def main_worker(configs):
         model = build_TTNet(configs)
     else:
         raise ValueError(f"Unknown model choice: {configs.model_choice}")
+    
+    # Move model to device before broadcasting
+    model = model.to(configs.device)
+    
+    print(f"Rank {configs.rank}: Model built with {sum(p.numel() for p in model.parameters())} parameters.")
 
-    model = make_data_parallel(model, configs)
+    try:
+        model = make_data_parallel(model, configs)
+        print("Model made parallel successfully.")
+    except RuntimeError as e:
+        print(f"Runtime error during parallelization: {e}")
+        exit()
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        raise
 
     optimizer = create_optimizer(configs, model)
     lr_scheduler = create_lr_scheduler(optimizer, configs)
