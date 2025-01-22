@@ -911,7 +911,7 @@ if __name__ == '__main__':
     configs.num_frames = 5
     configs.interval = 1
     configs.dataset_choice ='tta'
-    configs.event = True
+    # configs.event = True
     configs.bidirect = True
     configs.test = True
     # configs.sequential = True

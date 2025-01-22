@@ -1,0 +1,107 @@
+Wed Jan 22 14:28:09 2025       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 535.183.06             Driver Version: 535.183.06   CUDA Version: 12.2     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA A100-PCIE-40GB          Off | 00000000:81:00.0 Off |                    0 |
+| N/A   34C    P0              40W / 250W |      0MiB / 40960MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+|   1  NVIDIA A100-PCIE-40GB          Off | 00000000:C1:00.0 Off |                    0 |
+| N/A   34C    P0              37W / 250W |      0MiB / 40960MiB |      4%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+W0122 14:28:25.184453 140533607352128 torch/distributed/run.py:779] 
+W0122 14:28:25.184453 140533607352128 torch/distributed/run.py:779] *****************************************
+W0122 14:28:25.184453 140533607352128 torch/distributed/run.py:779] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0122 14:28:25.184453 140533607352128 torch/distributed/run.py:779] *****************************************
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/selective_scan_interface.py:164: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/selective_scan_interface.py:164: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/selective_scan_interface.py:240: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/selective_scan_interface.py:240: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/layer_norm.py:986: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/layer_norm.py:1045: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout, *args):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/layer_norm.py:986: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/layer_norm.py:1045: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout, *args):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/distributed/tensor_parallel.py:26: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, x, weight, bias, process_group=None, sequence_parallel=True):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/distributed/tensor_parallel.py:26: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, x, weight, bias, process_group=None, sequence_parallel=True):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/distributed/tensor_parallel.py:62: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, grad_output):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/distributed/tensor_parallel.py:62: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, grad_output):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/ssd_combined.py:758: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, zxbcdt, conv1d_weight, conv1d_bias, dt_bias, A, D, chunk_size, initial_states=None, seq_idx=None, dt_limit=(0.0, float("inf")), return_final_states=False, activation="silu",
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/ssd_combined.py:836: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout, *args):
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/ssd_combined.py:758: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  def forward(ctx, zxbcdt, conv1d_weight, conv1d_bias, dt_bias, A, D, chunk_size, initial_states=None, seq_idx=None, dt_limit=(0.0, float("inf")), return_final_states=False, activation="silu",
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/mamba_ssm/ops/triton/ssd_combined.py:836: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
+  def backward(ctx, dout, *args):
+Number of GPUs: 2
+GPU 0: NVIDIA A100-PCIE-40GB
+GPU 1: NVIDIA A100-PCIE-40GB
+Running on rank 1, using GPU 1
+Use GPU: 1 for training
+Running on rank 0, using GPU 0
+Use GPU: 0 for training
+Building Motion Light model...
+../logs/tracking_288_512_motion_light_TTA(3)_new_data tracking_288_512_motion_light_TTA(3)_new_data
+2025-01-22 14:30:10,923: logger.py - info(), at Line 39:INFO:
+>>> Created a new logger
+2025-01-22 14:30:10,926: logger.py - info(), at Line 39:INFO:
+>>> configs: {'seed': 2024, 'working_dir': '../', 'saved_fn': 'tracking_288_512_motion_light_TTA(3)_new_data', 'no_val': False, 'no_test': True, 'test': False, 'val_size': 0.2, 'num_samples': None, 'batch_size': 22, 'num_workers': 8, 'distributed': True, 'print_freq': 100, 'checkpoint_freq': 1, 'earlystop_patience': None, 'save_test_output': False, 'pretrained_path': None, 'backbone_choice': 'single', 'backbone_pretrained': True, 'backbone_out_channels': 2048, 'transfromer_dmodel': 512, 'transformer_nhead': 8, 'num_feature_levels': 1, 'num_classes': 1, 'num_queries': 20, 'model_choice': 'motion_light', 'weighting_list': [1, 2, 2, 3], 'video_path': None, 'output_format': 'text', 'show_image': False, 'save_demo_output': False, 'num_frames': 3, 'interval': 1, 'start_epoch': 1, 'num_epochs': 30, 'lr': 0.0005, 'minimum_lr': 1e-07, 'momentum': 0.9, 'weight_decay': 5e-05, 'optimizer_type': 'adamw', 'loss_function': 'WBCE', 'lr_type': 'plateau', 'lr_factor': 0.5, 'lr_step_size': 5, 'lr_patience': 3, 'occluded_prob': 0.1, 'ball_size': 4, 'dataset_choice': 'tta', 'event': False, 'bidirect': False, 'sequential': False, 'smooth_labelling': False, 'img_size': [288, 512], 'world_size': 2, 'rank': 0, 'dist_url': 'env://', 'dist_backend': 'nccl', 'gpu_idx': 0, 'no_cuda': False, 'multiprocessing_distributed': True, 'device': device(type='cuda', index=0), 'ngpus_per_node': 2, 'pin_memory': True, 'org_size': (1080, 1920), 'fps': 25, 'results_dir': '../results', 'logs_dir': '../logs/tracking_288_512_motion_light_TTA(3)_new_data', 'checkpoints_dir': '../checkpoints/tracking_288_512_motion_light_TTA(3)_new_data', 'frame_dir': '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/demo', 'dataset_dir': '/home/s224705071/github/TT/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/dataset', 'train_game_list': ['game_1', 'game_2', 'game_3', 'game_4', 'game_5'], 'test_game_list': ['test_1', 'test_2', 'test_3', 'test_4', 'test_5', 'test_6', 'test_7'], 'events_dict': {'bounce': 0, 'net': 1, 'empty_event': 2}, 'events_weights_loss_dict': {'bounce': 1.0, 'net': 3.0}, 'tennis_dataset_dir': '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tennis_data', 'tennis_train_game_list': ['game1', 'game2', 'game3', 'game4', 'game5', 'game6', 'game7', 'game8'], 'tennis_test_game_list': ['game9', 'game10'], 'badminton_dataset_dir': '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/badminton/TrackNetV2', 'badminton_train_game_list': ['Amateur', 'Professional'], 'badminton_test_game_list': ['Test'], 'tta_dataset_dir': '/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset', 'tta_training_match_list': ['24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN', '24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA'], 'tta_test_match_list': ['24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA'], 'is_master_node': True}
+Building Motion Light model...
+Rank 0: Model built with 8433155 parameters.
+Rank 1: Model built with 8433155 parameters.
+Model made parallel successfully.
+using WBCE for loss function
+Model made parallel successfully.
+using WBCE for loss function
+2025-01-22 14:30:12,539: logger.py - info(), at Line 39:INFO:
+number of trained parameters of the model: 8433155
+2025-01-22 14:30:12,539: logger.py - info(), at Line 39:INFO:
+>>> Loading dataset & getting dataloader...
+0 skipped frame due to due to invalid last label0 skipped frame due to due to invalid last label
+
+GPU 1 (Rank 1): 5833 samples total, 2917 samples for this GPU
+  0%|          | 0/266 [00:00<?, ?it/s]2025-01-22 14:30:25,184: logger.py - info(), at Line 39:INFO:
+Batch data shape: torch.Size([11, 3, 3, 288, 512])
+GPU 0 (Rank 0): 5833 samples total, 2917 samples for this GPU
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+number of batches in train set: 266
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+number of batches in val set: 67
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+=================================== 1/30 ===================================
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+2025-01-22 14:30:25,185: logger.py - info(), at Line 39:INFO:
+>>> Epoch: [1/30] learning rate: 5.00e-04
+  0%|          | 0/266 [00:00<?, ?it/s]/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/nn/modules/conv.py:454: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at ../aten/src/ATen/native/Convolution.cpp:1031.)
+  return F.conv2d(input, weight, bias, self.stride,
+/home/s224705071/.conda/envs/PIDA/lib/python3.9/site-packages/torch/nn/modules/conv.py:454: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at ../aten/src/ATen/native/Convolution.cpp:1031.)
+  return F.conv2d(input, weight, bias, self.stride,
+  0%|          | 1/266 [00:12<53:19, 12.07s/it]  0%|          | 1/266 [00:24<1:47:36, 24.36s/it]  1%|          | 2/266 [00:12<23:56,  5.44s/it]  1%|          | 2/266 [00:25<46:12, 10.50s/it]    1%|          | 3/266 [00:25<26:36,  6.07s/it]  1%|          | 3/266 [00:13<14:33,  3.32s/it]  2%|▏         | 4/266 [00:14<10:09,  2.33s/it]  2%|▏         | 4/266 [00:26<17:25,  3.99s/it]  2%|▏         | 5/266 [00:15<07:43,  1.78s/it]  2%|▏         | 5/266 [00:27<12:21,  2.84s/it]  2%|▏         | 6/266 [00:28<09:18,  2.15s/it]  2%|▏         | 6/266 [00:16<06:16,  1.45s/it]  3%|▎         | 7/266 [00:29<07:46,  1.80s/it]  3%|▎         | 7/266 [00:17<05:44,  1.33s/it]  3%|▎         | 8/266 [00:17<05:00,  1.16s/it]  3%|▎         | 8/266 [00:30<06:23,  1.49s/it]  3%|▎         | 9/266 [00:18<04:30,  1.05s/it]  3%|▎         | 9/266 [00:31<05:27,  1.27s/it]  4%|▍         | 10/266 [00:31<04:49,  1.13s/it]  4%|▍         | 10/266 [00:19<04:09,  1.02it/s]  4%|▍         | 11/266 [00:32<04:23,  1.03s/it]  4%|▍         | 11/266 [00:20<03:56,  1.08it/s]  5%|▍         | 12/266 [00:21<03:45,  1.13it/s]  5%|▍         | 12/266 [00:33<04:04,  1.04it/s]  5%|▍         | 13/266 [00:22<04:21,  1.03s/it]  5%|▍         | 13/266 [00:34<04:34,  1.09s/it]  5%|▌         | 14/266 [00:25<06:54,  1.65s/it]  5%|▌         | 14/266 [00:37<07:03,  1.68s/it]  6%|▌         | 15/266 [00:27<07:05,  1.70s/it]  6%|▌         | 15/266 [00:39<07:12,  1.72s/it]  6%|▌         | 16/266 [00:40<06:01,  1.45s/it]  6%|▌         | 16/266 [00:28<05:56,  1.43s/it]  6%|▋         | 17/266 [00:29<05:09,  1.24s/it]  6%|▋         | 17/266 [00:41<05:12,  1.25s/it]  7%|▋         | 18/266 [00:43<06:54,  1.67s/it]  7%|▋         | 18/266 [00:31<06:52,  1.66s/it]  7%|▋         | 19/266 [00:46<07:29,  1.82s/it]  7%|▋         | 19/266 [00:33<07:28,  1.82s/it]  8%|▊         | 20/266 [00:46<06:13,  1.52s/it]  8%|▊         | 20/266 [00:34<06:12,  1.51s/it]  8%|▊         | 21/266 [00:35<05:19,  1.30s/it]  8%|▊         | 21/266 [00:47<05:20,  1.31s/it]  8%|▊         | 22/266 [00:50<06:46,  1.67s/it]  8%|▊         | 22/266 [00:37<06:45,  1.66s/it]  9%|▊         | 23/266 [00:38<05:41,  1.41s/it]  9%|▊         | 23/266 [00:51<05:42,  1.41s/it]  9%|▉         | 24/266 [00:51<04:57,  1.23s/it]  9%|▉         | 24/266 [00:39<04:57,  1.23s/it]  9%|▉         | 25/266 [00:53<04:52,  1.21s/it]  9%|▉         | 25/266 [00:40<04:52,  1.21s/it] 10%|▉         | 26/266 [00:44<08:20,  2.08s/it] 10%|▉         | 26/266 [00:57<08:20,  2.09s/it] 10%|█         | 27/266 [00:45<06:46,  1.70s/it] 10%|█         | 27/266 [00:58<06:46,  1.70s/it] 11%|█         | 28/266 [00:46<05:41,  1.43s/it] 11%|█         | 28/266 [00:58<05:41,  1.43s/it] 11%|█         | 29/266 [00:47<05:32,  1.40s/it] 11%|█         | 29/266 [01:00<05:32,  1.40s/it] 11%|█▏        | 30/266 [00:50<06:45,  1.72s/it] 11%|█▏        | 30/266 [01:02<06:45,  1.72s/it] 12%|█▏        | 31/266 [00:51<05:39,  1.45s/it] 12%|█▏        | 31/266 [01:03<05:39,  1.45s/it] 12%|█▏        | 32/266 [00:51<04:52,  1.25s/it] 12%|█▏        | 32/266 [01:04<04:52,  1.25s/it] 12%|█▏        | 33/266 [00:53<05:39,  1.46s/it] 12%|█▏        | 33/266 [01:06<05:39,  1.46s/it] 13%|█▎        | 34/266 [01:07<05:31,  1.43s/it] 13%|█▎        | 34/266 [00:55<05:31,  1.43s/it] 13%|█▎        | 35/266 [01:08<04:47,  1.24s/it] 13%|█▎        | 35/266 [00:56<04:47,  1.24s/it] 14%|█▎        | 36/266 [00:56<04:15,  1.11s/it] 14%|█▎        | 36/266 [01:09<04:15,  1.11s/it] 14%|█▍        | 37/266 [00:59<05:27,  1.43s/it] 14%|█▍        | 37/266 [01:11<05:27,  1.43s/it] 14%|█▍        | 38/266 [01:03<09:06,  2.40s/it] 14%|█▍        | 38/266 [01:15<09:06,  2.40s/it] 15%|█▍        | 39/266 [01:04<07:15,  1.92s/it] 15%|█▍        | 39/266 [01:16<07:15,  1.92s/it] 15%|█▌        | 40/266 [01:17<05:58,  1.59s/it] 15%|█▌        | 40/266 [01:05<05:58,  1.59s/it] 15%|█▌        | 41/266 [01:18<05:04,  1.35s/it] 15%|█▌        | 41/266 [01:06<05:04,  1.35s/it] 16%|█▌        | 42/266 [01:08<06:09,  1.65s/it] 16%|█▌        | 42/266 [01:20<06:09,  1.65s/it] 16%|█▌        | 43/266 [01:21<05:11,  1.40s/it] 16%|█▌        | 43/266 [01:09<05:11,  1.40s/it] 17%|█▋        | 44/266 [01:22<04:31,  1.22s/it] 17%|█▋        | 44/266 [01:10<04:31,  1.22s/it] 17%|█▋        | 45/266 [01:24<05:20,  1.45s/it] 17%|█▋        | 45/266 [01:12<05:20,  1.45s/it] 17%|█▋        | 46/266 [01:26<06:03,  1.65s/it] 17%|█▋        | 46/266 [01:14<06:03,  1.65s/it] 18%|█▊        | 47/266 [01:27<05:06,  1.40s/it] 18%|█▊        | 47/266 [01:14<05:06,  1.40s/it] 18%|█▊        | 48/266 [01:28<04:26,  1.22s/it] 18%|█▊        | 48/266 [01:15<04:26,  1.22s/it] 18%|█▊        | 49/266 [01:17<05:06,  1.41s/it] 18%|█▊        | 49/266 [01:29<05:06,  1.41s/it]

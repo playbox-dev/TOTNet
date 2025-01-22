@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:3
+#SBATCH --gres=gpu:2
 #SBATCH --job-name=Aug_occl
-####SBATCH -w wulf-2gpu-vm02
+#SBATCH -w boromir
 
 nvidia-smi
 export NCCL_P2P_DISABLE=1
@@ -32,16 +32,16 @@ export NCCL_P2P_DISABLE=1
 #     --val-size 0.2 \
 #     --pretrained_path '../checkpoints/normal_tracking_288_512_tracknetv2_tt(5)/normal_tracking_288_512_tracknetv2_tt(5)_best.pth' \
 
-torchrun --nproc_per_node=3 main.py     \
+torchrun --nproc_per_node=2 main.py     \
     --num_epochs 30   \
-    --saved_fn 'tracking_288_512_motion_light_TTA(5)_new_data'   \
-    --num_frames 5  \
+    --saved_fn 'tracking_288_512_motion_light_TTA(3)_new_data'   \
+    --num_frames 3  \
     --optimizer_type adamw  \
     --lr 5e-4 \
     --loss_function WBCE  \
     --weight_decay 5e-5 \
     --img_size 288 512 \
-    --batch_size 24 \
+    --batch_size 22 \
     --print_freq 100 \
     --dist_url 'env://' \
     --dist_backend 'nccl' \
