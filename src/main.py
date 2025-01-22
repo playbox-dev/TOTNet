@@ -12,13 +12,8 @@ from tqdm import tqdm
 # from model.propose_model import build_detector
 from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
-from model.motion_model import build_motion_model, post_process
 from model.motion_model_light import build_motion_model_light
-from model.motion_model_light_v2 import build_motion_model_lightv2
 from model.motion_model_v3 import build_motion_model_light_opticalflow
-from model.mamba_model import build_mamba
-from model.two_stream_network import build_two_streams_model
-from model.sequential_model import build_sequential_model
 from model.monoTrack import build_monoTrack
 from model.TTNet import build_TTNet
 from model.model_utils import make_data_parallel, get_num_parameters
