@@ -89,9 +89,9 @@ torchrun --nproc_per_node=3 main.py \
     --dist_backend 'nccl' \
     --multiprocessing_distributed \
     --distributed \
-    --dataset_choice 'tta' \
+    --dataset_choice 'tennis' \
     --weighting_list 1 2 2 3 \
-    --model_choice 'motion_light' \
+    --model_choice 'TOTNet' \
     --occluded_prob 0.1 \
     --ball_size 4 \
     --val-size 0.2 \
