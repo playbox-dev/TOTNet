@@ -13,9 +13,9 @@ sys.path.append('./')
 from data_process.video_loader import Video_Loader
 from data_process.folder_loader import Folder_Loader
 from model.model_utils import load_pretrained_model
-from model.motion_model_light import build_motion_model_light
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
 from model.motion_model import build_motion_model
-from model.motion_model_v3 import build_motion_model_light_opticalflow
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.tracknet import build_TrackNetV2
 from model.wasb import build_wasb
 from config.config import parse_configs

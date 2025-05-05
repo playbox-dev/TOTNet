@@ -187,7 +187,7 @@ def parse_configs():
 
     # configs.dataset_dir = os.path.join(configs.working_dir, 'dataset')
 
-    configs.dataset_dir = os.path.join('/home/s224705071/github/TT/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/', 'dataset')
+    configs.dataset_dir = os.path.join('../', 'dataset')
     configs.train_game_list = ['game_1', 'game_2', 'game_3', 'game_4', 'game_5']
     configs.test_game_list = ['test_1', 'test_2', 'test_3', 'test_4', 'test_5', 'test_6', 'test_7']
     configs.events_dict = {
@@ -208,11 +208,11 @@ def parse_configs():
     configs.tennis_test_game_list = ['game9', 'game10']
 
 
-    configs.badminton_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/badminton/TrackNetV2')
+    configs.badminton_dataset_dir = os.path.join('../data/badminton/TrackNetV2')
     configs.badminton_train_game_list = ['Amateur', 'Professional']
     configs.badminton_test_game_list = ['Test']
 
-    configs.tta_dataset_dir = os.path.join('/home/s224705071/github/PhysicsInformedDeformableAttentionNetwork/data/tta_dataset')
+    configs.tta_dataset_dir = os.path.join('../data/tta_dataset')
     configs.tta_training_match_list = ['24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN', '24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA']
     configs.tta_test_match_list = ['24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA']
 

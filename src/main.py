@@ -12,8 +12,8 @@ from tqdm import tqdm
 # from model.propose_model import build_detector
 from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
-from model.motion_model_light import build_motion_model_light
-from model.motion_model_v3 import build_motion_model_light_opticalflow
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.monoTrack import build_monoTrack
 from model.TTNet import build_TTNet
 from model.model_utils import make_data_parallel, get_num_parameters
@@ -104,27 +104,12 @@ def main_worker(configs):
     elif configs.model_choice == 'tracknetv2':
         print("Building TrackNetV2 model...")
         model = build_TrackNetV2(configs)
-    elif configs.model_choice == 'mamba':
-        print("Building Mamba model...")
-        model = build_mamba(configs)
-    elif configs.model_choice == 'motion':
-        print("Building Motion model...")
-        model = build_motion_model(configs)
-    elif configs.model_choice == 'two_stream_model':
-        print("Building Two Streams model...")
-        model = build_two_streams_model(configs)
-    elif configs.model_choice == 'motion_light':
-        print("Building Motion Light model...")
+    elif configs.model_choice == 'TOTNet':
+        print("Building TOTNet model...")
         model = build_motion_model_light(configs)
-    elif configs.model_choice == 'motion_light_opticalflow':
-        print("Building Motion Light Optical Flow model...")
+    elif configs.model_choice == 'TOTNet_OF':
+        print("Building TOTNet Optical Flow model...")
         model = build_motion_model_light_opticalflow(configs)
-    elif configs.model_choice == 'sequential':
-        print("Building Sequential Model")
-        model = build_sequential_model(configs)
-    elif configs.model_choice == 'motion_lightv2':
-        print("Building motion light v2")
-        model = build_motion_model_lightv2(configs)
     elif configs.model_choice == 'monoTrack':
         print("Building MonoTrack")
         model = build_monoTrack(configs)
