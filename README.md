@@ -215,9 +215,9 @@ TTNet is originally designed for a specific resolution of **128×320 pixels**, a
 We evaluated the impact of varying the number of input frames on model performance. Interestingly, increasing the number of frames beyond 5 did not improve accuracy. This is likely due to the frequent trajectory changes in racket sports—caused by rapid direction shifts when the ball is hit—making longer temporal windows less useful.
 
 ![Accuracy vs Frame Count](images/Model_Accuracy_Different_Frames.png)
-*Figure: Model accuracy across different numbers of input frames (3, 5, 7, 9) for each visibility level.*
+*Figure: Model accuracy across different numbers of input frames (3, 5, 7, 9) for each visibility level. Visibility 0 = Out of Frame, 1 = Clearly Visible, 2 = Partially Occluded, 3 = Fully Occluded*
 
 We also compared using the **middle frame** versus the **last frame** as the prediction target. As shown below, performance remained consistent across both configurations. This suggests that **TOTNet effectively predicts ball trajectories using only past frames**, without requiring symmetric or future context.
 
 ![Middle vs Last Frame Target](images/Model_Accuracy_Different_Frames_Bidirect.png)
-*Figure: Model accuracy using the middle frame as target across varying input frame counts and visibility levels.*
+*Figure: Model accuracy using the middle frame as target across varying input frame counts and visibility levels. Visibility 0 = Out of Frame, 1 = Clearly Visible, 2 = Partially Occluded, 3 = Fully Occluded*
