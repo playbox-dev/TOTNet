@@ -42,6 +42,7 @@ To facilitate reproducibility and further research, we provide links to access t
 - **Tennis and Badminton Datasets**  
   Please follow the official instructions provided by the WASB-SBDT repository:  
   👉 [WASB-SBDT Dataset Instructions](https://github.com/nttcom/WASB-SBDT/blob/main/GET_STARTED.md)
+  👉 [TrackNet Dataset](https://gitlab.nol.cs.nycu.edu.tw/open-source/TrackNet)
 
 - **TT Dataset (Table Tennis)**  
   The TT dataset can be obtained via the TTNet repository:  
