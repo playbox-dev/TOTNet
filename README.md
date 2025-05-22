@@ -3,6 +3,7 @@
 
 ![Net_Architecture-Model_Example](https://github.com/user-attachments/assets/77b3a677-489b-4ee8-b41b-21c46d08c18c)
 
+![Demo](./images/TOTNet_Example.gif)
 
 TOTNet is specifically designed to utilize temporal and spatial information for ball tracking, especially in challenging occlusion scenarios.
 
