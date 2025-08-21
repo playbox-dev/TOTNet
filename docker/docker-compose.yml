@@ -9,7 +9,10 @@ services:
     # NOTE: 各自設定してください．
     volumes:
       - ../data:/opt/ml/data
+      - ../output/checkpoints:/opt/ml/code/checkpoints
+      - ../output/results:/opt/ml/code/results
       - ../src:/opt/ml/code/src
+      - ../.bash_history:/root/.bash_history
     deploy:
       resources:
         reservations:
