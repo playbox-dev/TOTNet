@@ -167,3 +167,7 @@ cython_debug/
 /data
 *.jpg
 *.mp4
+
+.bash_history
+data/
+output/
