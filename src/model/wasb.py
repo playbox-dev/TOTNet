@@ -16,12 +16,17 @@ from __future__ import print_function
 import os
 import logging
 import yaml
-from attrdict import AttrDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
 sys.path.append('../')
+
+
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
 
 
 BN_MOMENTUM = 0.1

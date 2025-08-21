@@ -12,8 +12,8 @@ from tqdm import tqdm
 # from model.propose_model import build_detector
 from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
-from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
-from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
+from model.TOTNet import build_motion_model_light
+from model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.monoTrack import build_monoTrack
 from model.TTNet import build_TTNet
 from model.model_utils import make_data_parallel, get_num_parameters
@@ -433,19 +433,19 @@ def evaluate_one_epoch(val_loader, model, loss_func, epoch, configs, logger):
                 reduced_cls_recall = cls_recall_tensor
                 reduced_cls_f1 = cls_f1_tensor
 
-            losses.update(to_python_float(reduced_loss), batch_size)
-            heatmap_losses.update(to_python_float(reduced_heatmap_loss), batch_size)
-            cls_losses.update(to_python_float(reduced_cls_loss), batch_size)
-            rmses.update(to_python_float(reduced_rmse), batch_size)
-            accuracy_overall.update(to_python_float(reduced_accuracy), batch_size)
-            precision_overall.update(to_python_float(reduced_precision), batch_size)
-            recall_overall.update(to_python_float(reduced_recall), batch_size)
-            f1_overall.update(to_python_float(reduced_f1), batch_size)
+            losses.update(reduced_loss if isinstance(reduced_loss, float) else to_python_float(reduced_loss), batch_size)
+            heatmap_losses.update(reduced_heatmap_loss if isinstance(reduced_heatmap_loss, float) else to_python_float(reduced_heatmap_loss), batch_size)
+            cls_losses.update(reduced_cls_loss if isinstance(reduced_cls_loss, float) else to_python_float(reduced_cls_loss), batch_size)
+            rmses.update(reduced_rmse if isinstance(reduced_rmse, float) else to_python_float(reduced_rmse), batch_size)
+            accuracy_overall.update(reduced_accuracy if isinstance(reduced_accuracy, float) else to_python_float(reduced_accuracy), batch_size)
+            precision_overall.update(reduced_precision if isinstance(reduced_precision, float) else to_python_float(reduced_precision), batch_size)
+            recall_overall.update(reduced_recall if isinstance(reduced_recall, float) else to_python_float(reduced_recall), batch_size)
+            f1_overall.update(reduced_f1 if isinstance(reduced_f1, float) else to_python_float(reduced_f1), batch_size)
 
-            cls_accuracy_overall.update(to_python_float(reduced_cls_accuracy), batch_size)
-            cls_precision_overall.update(to_python_float(reduced_cls_precision), batch_size)
-            cls_recall_overall.update(to_python_float(reduced_cls_recall), batch_size)
-            cls_f1_overall.update(to_python_float(reduced_cls_f1), batch_size)
+            cls_accuracy_overall.update(reduced_cls_accuracy if isinstance(reduced_cls_accuracy, float) else to_python_float(reduced_cls_accuracy), batch_size)
+            cls_precision_overall.update(reduced_cls_precision if isinstance(reduced_cls_precision, float) else to_python_float(reduced_cls_precision), batch_size)
+            cls_recall_overall.update(reduced_cls_recall if isinstance(reduced_cls_recall, float) else to_python_float(reduced_cls_recall), batch_size)
+            cls_f1_overall.update(reduced_cls_f1 if isinstance(reduced_cls_f1, float) else to_python_float(reduced_cls_f1), batch_size)
 
             # measure elapsed time
             torch.cuda.synchronize()

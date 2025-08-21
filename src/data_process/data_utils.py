@@ -539,65 +539,88 @@ def get_all_detection_infor_tennis_sequence(game_list, configs):
 def get_all_detection_infor_badminton(level_list, configs):
     num_frames = configs.num_frames - 1
 
-    dir = os.path.join(configs.badminton_dataset_dir)
+    # Updated path for new data structure
+    dir = '/opt/ml/data/badminton_data/badminton'
     events_infor = []
     events_labels = []
     skipped_frame = 0
-    for level_name in level_list:
-        level_dir = os.path.join(dir, level_name)
-        games_list = [name for name in os.listdir(level_dir)]
-        for game_name in games_list:
-            game_dir = os.path.join(level_dir, game_name)
-            images_dir = os.path.join(game_dir, 'images')
-            clips_list = [name for name in os.listdir(images_dir)]
-            for clip_name in clips_list:
-                clip_dir = os.path.join(images_dir, clip_name)
-                ball_annos_dir = os.path.join(game_dir, 'csv')
-                
-                file_path = os.path.join(ball_annos_dir, clip_name+'_ball.csv')
-         
-                ball_annos = []
-                # Load ball annotations from CSV
-                with open(file_path, mode='r') as csv_file:
-                    csv_reader = csv.DictReader(csv_file)  # Use DictReader to load as a list of dictionaries
-                    for row in csv_reader:
-                        ball_annos.append(row)
-                
-                for row in ball_annos:
-                    frame = row['Frame']  # Assuming `file_name` is a column in the CSV
-                
-                    visibility = int(row['Visibility']) if row['Visibility'] else -1  # Convert visibility to integer
-                    x = int(float(row['X'])) if row['X'] else -1  # Default to -1 if empty Convert x-coordinate to integer
-                    y = int(float(row['Y'])) if row['Y'] else -1  # Default to -1 if empty 
-                    status = -1
     
-
-                    # Extract the first four characters from file_name and convert to an integer
-                    ball_frameidx = int(frame)
+    # List all match directories
+    if level_list == ['Amateur', 'Professional']:
+        # For training, use all non-test matches
+        games_list = [name for name in os.listdir(dir) if name.startswith('match') and not name.startswith('test_')]
+    else:
+        # For test, use test matches
+        games_list = [name for name in os.listdir(dir) if name.startswith('test_match')]
+    
+    for game_name in games_list:
+        game_dir = os.path.join(dir, game_name)
+        frame_dir = os.path.join(game_dir, 'frame')
+        csv_dir = os.path.join(game_dir, 'csv')
         
-                    sub_ball_frame_indices = [
-                        ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
-                        for i in range(num_frames + 1)
-                    ]
-
-
-                    img_path_list = []
-    
-                    for idx in sub_ball_frame_indices:
-                        img_path = os.path.join(clip_dir, f'img_{idx:06d}.jpg')
-
-                        img_path_list.append(img_path)
+        # Check if directories exist
+        if not os.path.exists(frame_dir) or not os.path.exists(csv_dir):
+            continue
             
-                    # Check if any valid frames were found
-                    if not img_path_list:
-                        print(f"No valid frames found for event at frame {ball_frameidx}.")
-                        continue
+        # Find CSV files
+        csv_files = [f for f in os.listdir(csv_dir) if f.endswith('_ball.csv')]
+        
+        for csv_file in csv_files:
+            clip_name = csv_file.replace('_ball.csv', '')
+            file_path = os.path.join(csv_dir, csv_file)
+            clip_frame_dir = os.path.join(frame_dir, clip_name)  # Add clip subdirectory
+            
+            # Check if clip frame directory exists
+            if not os.path.exists(clip_frame_dir):
+                continue
+            
+            ball_annos = []
+            # Load ball annotations from CSV
+            with open(file_path, mode='r') as csv_file_handle:
+                csv_reader = csv.DictReader(csv_file_handle)  # Use DictReader to load as a list of dictionaries
+                for row in csv_reader:
+                    ball_annos.append(row)
+            
+            for row in ball_annos:
+                frame = row['Frame']  # Assuming `file_name` is a column in the CSV
+                
+                visibility = int(row['Visibility']) if row['Visibility'] else -1  # Convert visibility to integer
+                x = int(float(row['X'])) if row['X'] else -1  # Default to -1 if empty Convert x-coordinate to integer
+                y = int(float(row['Y'])) if row['Y'] else -1  # Default to -1 if empty 
+                status = -1
 
+                # Extract the first four characters from file_name and convert to an integer
+                ball_frameidx = int(frame)
+                
+                # Skip if frame index is too small (not enough previous frames)
+                if ball_frameidx < num_frames:
+                    continue
+                
+                sub_ball_frame_indices = [
+                    ball_frameidx - (num_frames - i)  # Adjust to have the last as key frame
+                    for i in range(num_frames + 1)
+                ]
 
-                    ball_position = np.array([x, y], dtype=int)
- 
-                    events_infor.append(img_path_list)
-                    events_labels.append([ball_position, visibility, status])
+                img_path_list = []
+                valid_frames = True
+                
+                for idx in sub_ball_frame_indices:
+                    # Skip negative indices
+                    if idx < 0:
+                        valid_frames = False
+                        break
+                    # Updated path to use clip-specific frame directory
+                    img_path = os.path.join(clip_frame_dir, f'{idx:05d}.png')
+                    img_path_list.append(img_path)
+                
+                # Check if any valid frames were found
+                if not valid_frames or not img_path_list:
+                    continue
+
+                ball_position = np.array([x, y], dtype=int)
+                
+                events_infor.append(img_path_list)
+                events_labels.append([ball_position, visibility, status])
 
                
                 
