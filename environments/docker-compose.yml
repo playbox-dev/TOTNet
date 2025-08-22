@@ -8,10 +8,10 @@ services:
     tty: true
     # NOTE: 各自設定してください．
     volumes:
-      - ${DATASET_PATH}:/opt/ml/data
-      - ${BASH_HISTORY_PATH}:/root/.bash_history
-      - ../models:/opt/ml/code/checkpoints
-      - ../outputs/results:/opt/ml/code/results
+      - ${DATASET_PATH:-../data}:/opt/ml/data
+      - ${BASH_HISTORY_PATH:-../.bash_history}:/root/.bash_history
+      - ${MODELS_PATH:-../models}:/opt/ml/code/checkpoints
+      - ${RESULTS_PATH:-../outputs/results}:/opt/ml/code/results
       - ../src:/opt/ml/code/src
     deploy:
       resources:
