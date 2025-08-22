@@ -131,14 +131,10 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ### データセットのダウンロード
 
+各データセットについては，[WASB-SBDT](https://github.com/nttcom/WASB-SBDT/blob/main/GET_STARTED.md) からダウンロードできる．
+
 1. **テニス・バドミントンデータセット**
-
-   - [WASB-SBDT](https://github.com/nttcom/WASB-SBDT/blob/main/GET_STARTED.md)
-   - [TrackNet](https://gitlab.nol.cs.nycu.edu.tw/open-source/TrackNet)
-
-2. **卓球データセット**
-   - [TTNet Dataset](https://github.com/maudzung/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/tree/master/prepare_dataset)
-   - TTA Dataset（要リクエスト）
+   - [TrackNetV2](https://nycu1-my.sharepoint.com/personal/tik_m365_nycu_edu_tw/_layouts/15/onedrive.aspx?id=/personal/tik_m365_nycu_edu_tw/Documents/OpenDataset/TrackNetV2_Badminton/TrackNetV2.zip&parent=/personal/tik_m365_nycu_edu_tw/Documents/OpenDataset/TrackNetV2_Badminton&ga=1)
 
 ### データの配置
 
