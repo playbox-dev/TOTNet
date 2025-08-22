@@ -164,7 +164,8 @@ cython_debug/
 /logs
 /checkpoints
 .pth
-/data
+/data/*
+!/data/.gitkeep
 *.jpg
 *.mp4
 
