@@ -11,3 +11,5 @@ tqdm
 scipy
 ninja
 tensorboard
+pyyaml
+einops

@@ -26,14 +26,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
 
 WORKDIR /opt/ml/code
 RUN conda create -n totnet python=3.10
-RUN conda run -n totnet /bin/bash -c "pip install --no-cache-dir --upgrade pip setuptools==69.5.1 pathtools" && \
-  conda run -n totnet /bin/bash -c "pip install --no-cache-dir torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/test/cu118"
-# WARNING: ブランチが更新されてもCacheが効いて再ビルドされないので注意
-RUN git clone https://github.com/AugustRushG/TOTNet.git && \
-  # NOTE: memory不足なら並列数を下げる
-  # export MAX_JOBS=2 && \
-  TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} FORCE_CUDA=1 conda run -n totnet /bin/bash -c "pip install --no-cache-dir -r TOTNet/requirements.txt" && \
-  conda run -n totnet /bin/bash -c "pip install --no-cache-dir pyyaml einops"
+COPY requirements.txt /opt/ml/code/requirements.txt
+# NOTE: memory不足なら並列数を下げる
+# export MAX_JOBS=2 && \
+RUN TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} FORCE_CUDA=1 conda run -n totnet /bin/bash -c "pip install --no-cache-dir -r /opt/ml/code/requirements.txt"
 
 ##########################################* ffmpeg builder *###########################################
 FROM nvidia/cuda:11.8.0-base-ubuntu22.04 AS ffmpeg_builder
