@@ -169,5 +169,3 @@ cython_debug/
 *.mp4
 
 .bash_history
-data/
-output/

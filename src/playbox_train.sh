@@ -5,6 +5,7 @@ cd ../ || exit
 
 nvidia-smi
 
+# worked with RTX4080 Super 16GB
 python src/main.py \
   --num_epochs 20 \
   --saved_fn 'TOTNet' \
