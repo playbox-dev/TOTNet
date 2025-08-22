@@ -19,8 +19,8 @@ from model.mamba_model import build_mamba
 from model.two_stream_network import build_two_streams_model
 from model.wasb import build_wasb
 from model.motion_model import build_motion_model
-from model.TOTNet import build_motion_model_light
-from model.TOTNet_OF import build_motion_model_light_opticalflow
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.motion_model_light_v2 import build_motion_model_lightv2
 from model.monoTrack import build_monoTrack
 from model.TTNet import build_TTNet
@@ -29,7 +29,7 @@ from utils.misc import AverageMeter
 from utils.visualization import visualize_and_save_2d_heatmap, save_batch_optical_flow_visualization
 from config.config import parse_configs
 
-from model.TOTNet_OF import OpticalFlowMdel
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import OpticalFlowMdel
 
 def main():
     configs = parse_configs()

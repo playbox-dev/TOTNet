@@ -13,9 +13,9 @@ sys.path.append('./')
 from data_process.video_loader import Video_Loader
 from data_process.folder_loader import Folder_Loader
 from model.model_utils import load_pretrained_model
-from model.TOTNet import build_motion_model_light
-# from model.motion_model import build_motion_model  # File doesn't exist
-from model.TOTNet_OF import build_motion_model_light_opticalflow
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
+from model.motion_model import build_motion_model
+from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.tracknet import build_TrackNetV2
 from model.wasb import build_wasb
 from config.config import parse_configs
@@ -39,10 +39,10 @@ def demo(configs):
     configs.device = torch.device('cuda:{}'.format(configs.gpu_idx))
 
     # Model
-    if configs.model_choice == 'TOTNet' or configs.model_choice == 'motion_light':
+    if configs.model_choice == 'motion_light':
         model = build_motion_model_light(configs)
-    # elif configs.model_choice == 'motion':
-    #     model = build_motion_model(configs)  # Function doesn't exist
+    elif configs.model_choice == 'motion':
+        model = build_motion_model(configs)
     elif configs.model_choice == 'wasb':
         model = build_wasb(configs)
     elif configs.model_choice == 'motion_light_opticalflow':
