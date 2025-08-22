@@ -25,7 +25,7 @@ from losses_metrics.metrics import extract_coords
 
 def demo(configs):
 
-    if configs.dataset_choice == 'tt' or configs.dataset_choice == 'badminton' or configs.dataset_choice == 'tta':
+    if configs.dataset_choice == 'tt' or configs.dataset_choice == 'badminton' or configs.dataset_choice == 'tta' or configs.dataset_choice == 'tracknetv2':
         data_loader = Video_Loader(configs.video_path, configs.img_size, configs.num_frames)
     elif configs.dataset_choice == 'tennis':
         data_loader = Folder_Loader(configs.video_path, configs.img_size, configs.num_frames)
