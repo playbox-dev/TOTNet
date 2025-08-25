@@ -16,7 +16,7 @@ from __future__ import print_function
 import os
 import logging
 import yaml
-from attrdict import AttrDict
+from addict import Dict as AttrDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
