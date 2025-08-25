@@ -171,3 +171,6 @@ cython_debug/
 
 .bash_history
 *.pth
+
+# Docker build logs
+environments/log/

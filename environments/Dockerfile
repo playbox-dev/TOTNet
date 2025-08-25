@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=private \
 
 WORKDIR /opt/ml/code
 RUN conda create -n totnet python=3.10
-COPY requirements.txt /opt/ml/code/requirements.txt
+COPY environments/requirements.txt /opt/ml/code/requirements.txt
 # NOTE: memory不足なら並列数を下げる
 # export MAX_JOBS=2 && \
 RUN TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST} FORCE_CUDA=1 conda run -n totnet /bin/bash -c "pip install --no-cache-dir -r /opt/ml/code/requirements.txt"
@@ -147,3 +147,6 @@ COPY --from=ffmpeg_builder /lib/x86_64-linux-gnu/libnppicc.so.11 /lib/x86_64-lin
 COPY --from=ffmpeg_builder /lib/x86_64-linux-gnu/libnppidei.so.11 /lib/x86_64-linux-gnu/libnppidei.so.11
 COPY --from=ffmpeg_builder /lib/x86_64-linux-gnu/libnppif.so.11 /lib/x86_64-linux-gnu/libnppif.so.11
 COPY --from=ffmpeg_builder /lib/x86_64-linux-gnu/libnppig.so.11 /lib/x86_64-linux-gnu/libnppig.so.11
+
+# Copy source code into the image
+COPY src /opt/ml/code/src

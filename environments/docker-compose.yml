@@ -12,7 +12,11 @@ services:
       - ${BASH_HISTORY_PATH:-../.bash_history}:/root/.bash_history
       - ${MODELS_PATH:-../models}:/opt/ml/checkpoints
       - ${RESULTS_PATH:-../outputs/results}:/opt/ml/results
-      - ../src:/opt/ml/code/src
+      # Development mode: Uncomment the following line to mount host source code
+      # This allows real-time code editing but shares code across all containers
+      # - ../src:/opt/ml/code/src
+      # Production mode: Keep the above line commented to use code from the image
+      # This ensures each container has its own independent code copy
     deploy:
       resources:
         reservations:

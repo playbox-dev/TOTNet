@@ -100,16 +100,31 @@ TOTNet/
 git clone <repository-url>
 cd TOTNet
 
-# Docker環境のビルド
-cd environments
-./build.sh
+# Docker環境のビルド（プロジェクトルートから実行）
+bash ./environments/build.sh
 
 # コンテナの起動
+cd environments
 docker-compose up -d
 
 # コンテナに入る
 docker exec -it totnet /bin/bash
 ```
+
+#### 開発モードと運用モードの切り替え
+
+Docker環境では、ソースコードの扱い方を2つのモードで切り替えることができます：
+
+**開発モード（Development Mode）**
+
+- ホストのソースコードをコンテナにマウント
+- リアルタイムでコードの編集が可能
+- `environments/docker-compose.yml`の17行目のコメントを外す：
+
+  ```yaml
+  volumes:
+    - ../src:/opt/ml/code/src # この行のコメントを外す
+  ```
 
 ### 2. ローカル環境の場合 (非推奨)
 
