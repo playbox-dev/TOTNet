@@ -442,7 +442,7 @@ def parse_configs():
     configs.badminton_train_game_list = ["Amateur", "Professional"]
     configs.badminton_test_game_list = ["Test"]
 
-    configs.tta_dataset_dir = os.path.join("../data/tta_dataset")
+    configs.tta_dataset_dir = os.path.join("../data/table_tennis/tta")
     configs.tta_training_match_list = [
         "24Paralympics_FRA_F9_Lei_AUS_v_Xiong_CHN",
         "24Paralympics_FRA_M4_Addis_AUS_v_Chaiwut_THA",

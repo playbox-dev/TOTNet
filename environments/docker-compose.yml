@@ -10,8 +10,8 @@ services:
     volumes:
       - ${DATASET_PATH:-../data}:/opt/ml/data
       - ${BASH_HISTORY_PATH:-../.bash_history}:/root/.bash_history
-      - ${MODELS_PATH:-../models}:/opt/ml/code/checkpoints
-      - ${RESULTS_PATH:-../outputs/results}:/opt/ml/code/results
+      - ${MODELS_PATH:-../models}:/opt/ml/checkpoints
+      - ${RESULTS_PATH:-../outputs/results}:/opt/ml/results
       - ../src:/opt/ml/code/src
     deploy:
       resources:
