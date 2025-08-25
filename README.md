@@ -1,225 +1,302 @@
-# TOTNet: Temporal and Spatial Network for Ball Tracking
-
+# TOTNet: 時空間情報を活用したボールトラッキングネットワーク
 
 ![Net_Architecture-Model_Example](https://github.com/user-attachments/assets/77b3a677-489b-4ee8-b41b-21c46d08c18c)
 
-![Demo](./images/TOTNet_Example.gif)
+![Demo](./docs/images/TOTNet_Example.gif)
 
-TOTNet is specifically designed to utilize temporal and spatial information for ball tracking, especially in challenging occlusion scenarios.
+TOTNetは、時空間情報を活用してボールトラッキングを行う深層学習モデルです。特に遮蔽が発生する困難なシナリオでの追跡精度向上を目的としています。
 
----
-
-## Environment Setup
-
-### Recommended Environment
-
-- **Python Version:** 3.10
-
-### Installation Steps
-
-1. Clone this repository and navigate to the project directory:
-   ```bash
-   git clone <repository-url>
-   cd TOTNet
-   ```
-
-2. Install dependencies from the requirements file:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Verify the installation:
-   ```bash
-   python --version  # Ensure it is Python 3.10
-   ```
+> **注意**: これは[オリジナルのTOTNet](https://github.com/AugustRushG/TOTNet)をforkして改良したリポジトリです。  
+> オリジナルのREADMEは[docs/README_orgin.md](./docs/README_orgin.md)に保存されています。
 
 ---
 
-### Dataset Access
+## ディレクトリ構成
 
-To facilitate reproducibility and further research, we provide links to access the datasets used in our study:
-
-- **Tennis and Badminton Datasets**  
-  Please follow the official instructions provided by the WASB-SBDT repository:  
-  👉 [WASB-SBDT Dataset Instructions](https://github.com/nttcom/WASB-SBDT/blob/main/GET_STARTED.md)
-  👉 [TrackNet Dataset](https://gitlab.nol.cs.nycu.edu.tw/open-source/TrackNet)
-
-- **TT Dataset (Table Tennis)**  
-  The TT dataset can be obtained via the TTNet repository:  
-  👉 [TTNet Dataset Preparation](https://github.com/maudzung/TTNet-Real-time-Analysis-System-for-Table-Tennis-Pytorch/tree/master/prepare_dataset)
-
-- **TTA Dataset (Table Tennis Australia)**  
-  The TTA dataset is available upon request for research purposes only.  
-  To access the dataset:
-  1. Email us directly.
-  2. You will receive a usage agreement form.
-  3. Once the form is signed and returned, we will grant access to the dataset.
-
-Please note that the TTA dataset must **not be redistributed** and is strictly intended for non-commercial, academic research use.
-
-
-#### Dataset Organization
-
-After downloading, organize your datasets as follows:
 ```
-data/
-├── tta_dataset/
-├── tennis_data/
-├── badminton_data/
+TOTNet/
+├── data/                      # データセット格納ディレクトリ
+│   ├── badminton/             # バドミントンデータセット
+│   │   └── TrackNetV2/        # TrackNetV2データ(TrackNetV2作者が用意)
+│   ├── tennis/                # テニスデータセット
+│   │   └── TrackNet/          # TrackNetデータ(TrackNet作者が用意)
+│   └── table_tennis/          # 卓球データセット
+│       └── tta/                # ttaデータセット(TOTNet作者が用意)
+├── docs/                      # ドキュメント
+│   ├── README_orgin.md        # オリジナルREADME
+│   └── images/                # ドキュメント用画像
+├── environments/              # Docker環境設定
+│   ├── Dockerfile             # マルチステージビルド対応
+│   ├── docker-compose.yml    # Docker Compose設定
+│   └── build.sh              # ビルドスクリプト
+├── models/                   # モデル置き場
+├── outputs/                  # 出力ディレクトリ
+├── src/                      # ソースコード
+│   ├── config/               # 設定ファイル
+│   │   ├── config.py         # 基本設定
+│   │   ├── two_stream_network.yaml
+│   │   └── wasb.yaml
+│   ├── data_process/         # データ処理
+│   │   ├── dataloader.py    # データローダー
+│   │   ├── dataset.py       # データセット定義
+│   │   └── transformation.py # データ拡張
+│   ├── losses_metrics/       # 損失関数と評価指標
+│   │   ├── losses.py        # 損失関数定義
+│   │   └── metrics.py       # 評価指標
+│   ├── model/                # モデル定義
+│   │   ├── TOTNet.py        # メインモデル
+│   │   ├── TOTNet_OF.py     # オプティカルフロー版
+│   │   ├── TTNet.py         # 卓球用モデル
+│   │   ├── tracknet.py      # TrackNetV2
+│   │   ├── wasb.py          # WASBモデル
+│   │   └── ops/             # カスタムオペレーション
+│   ├── post_process/         # 後処理
+│   │   ├── bounce_detection.py
+│   │   └── table_detection.py
+│   ├── utils/                # ユーティリティ
+│   │   ├── logger.py        # ロギング
+│   │   ├── train_utils.py   # 学習ユーティリティ
+│   │   └── visualization.py # 可視化
+│   ├── main.py              # メイン学習スクリプト
+│   ├── test.py              # テストスクリプト
+│   ├── demo.py              # デモスクリプト
+│   ├── train.sh             # 標準学習スクリプト
+│   └── test.sh              # テスト実行スクリプト
+├── LICENSE                  # ライセンス
+└── README.md               # このファイル
 ```
 
 ---
 
-## How to Run
+## システム要件
 
-### Training Command
+### ハードウェア要件
 
-Use the following command to train the model:
+- **GPU**: NVIDIA GPU (CUDA 11.8対応)
+
+### ソフトウェア要件
+
+- **OS**: Ubuntu 20.04/22.04 LTS
+- **Docker**: 20.10以降
+- **Docker Compose**: 2.0以降
+- **NVIDIA Driver**: 520以降
+- **NVIDIA Container Toolkit**: インストール済み
+
+### Python環境（Dockerを使用しない場合）
+
+- **Python**: 3.10
+- **PyTorch**: 2.3.1
+- **CUDA**: 11.8
+- **cuDNN**: 8.6以降
+
+---
+
+## 環境構築
+
+### 1. Dockerを使用する場合（推奨）
+
 ```bash
-torchrun --nproc_per_node=3 main.py \
-    --num_epochs 30 \
-    --saved_fn 'TOTNet' \
-    --num_frames 5 \
-    --optimizer_type adamw \
-    --lr 5e-4 \
-    --loss_function WBCE \
-    --weight_decay 5e-5 \
-    --img_size 288 512 \
-    --batch_size 24 \
-    --print_freq 100 \
-    --dist_url 'env://' \
-    --dist_backend 'nccl' \
-    --multiprocessing_distributed \
-    --distributed \
-    --dataset_choice 'tennis' \
-    --weighting_list 1 2 2 3 \
-    --model_choice 'TOTNet' \
-    --occluded_prob 0.1 \
-    --ball_size 4 \
-    --val-size 0.2 \
-    --no_test
+# リポジトリのクローン
+git clone <repository-url>
+cd TOTNet
+
+# Docker環境のビルド（プロジェクトルートから実行）
+bash ./environments/build.sh
+
+# コンテナの起動
+cd environments
+docker-compose up -d
+
+# コンテナに入る
+docker exec -it totnet /bin/bash
 ```
 
-### Explanation of Arguments
+#### 開発モードと運用モードの切り替え
 
-- `--nproc_per_node=3`: Specifies the number of GPUs to use.
-- `--num_epochs`: Number of training epochs.
-- `--saved_fn`: Name of the folder to save results.
-- `--num_frames`: Number of consecutive frames to process.
-- `--optimizer_type`: Optimizer choice (e.g., `adamw`).
-- `--lr`: Learning rate.
-- `--loss_function`: Loss function (e.g., `WBCE` for weighted binary cross-entropy).
-- `--img_size`: Resolution of input images (height x width).
-- `--batch_size`: Batch size for training.
-- `--dist_url` and `--dist_backend`: Used for distributed training setup with `torchrun`.
-- `--dataset_choice`: Dataset to use (`tta`, `tennis`, or `badminton`).
-- `--model_choice`: Specify the model to use. Options include: `TOTNet`, `WASB`, `TrackNetV2`, and `monoTrack`.
-- `--occluded_prob`: Probability of occlusion during training.
-- `--val-size`: Validation dataset size as a fraction of the training dataset.
-- `--no_test`: Disable testing after training.
+Docker環境では、ソースコードの扱い方を2つのモードで切り替えることができます：
 
----
+**開発モード（Development Mode）**
 
-## Notes for Debugging
+- ホストのソースコードをコンテナにマウント
+- リアルタイムでコードの編集が可能
+- `environments/docker-compose.yml`の17行目のコメントを外す：
 
-1. **Distributed Training:**
-   - Ensure `--nproc_per_node` matches the number of GPUs available.
-   - If debugging or testing on a single GPU, set `--nproc_per_node=1` and remove `--multiprocessing_distributed` and `--distributed`.
+  ```yaml
+  volumes:
+    - ../src:/opt/ml/code/src # この行のコメントを外す
+  ```
 
-2. **Dataset Preparation:**
-   - Verify the dataset paths are correct.
-   - Organize the datasets as described in the `Dataset Organization` section.
+### 2. ローカル環境の場合 (非推奨)
 
-3. **Logs and Checkpoints:**
-   - Checkpoint files and logs will be saved in the directory specified by `--saved_fn`.
-   
----
-
-## Example Dataset Structure
-
-```
-data/
-├── tta_dataset/
-│   ├── training/
-│   │   ├── images/
-│   │   ├── labels.csv
-│   ├── test/
-│   │   ├── images/
-│   │   ├── labels.csv
-├── tennis_data/
-├── badminton_data/
-```
-
----
-
-## Example for Single GPU Debugging
-
-To debug or run on a single GPU, use the following modified command:
 ```bash
-python main.py \
-    --num_epochs 10 \
-    --saved_fn 'debug_run' \
-    --num_frames 5 \
-    --optimizer_type adamw \
-    --lr 5e-4 \
-    --loss_function WBCE \
-    --weight_decay 5e-5 \
-    --img_size 288 512 \
-    --batch_size 16 \
-    --dataset_choice 'tta' \
-    --model_choice 'TOTNet' \
-    --val-size 0.2
+# Python 3.10環境の準備
+conda create -n totnet python=3.10
+conda activate totnet
+
+# 依存関係のインストール
+pip install -r requirements.txt
+
+# CUDAの設定確認
+python -c "import torch; print(torch.cuda.is_available())"
 ```
-This will run on a single GPU without distributed training.
 
 ---
 
-For further details or troubleshooting, refer to the documentation or open an issue in the repository. Happy Training!
+## データセットの準備
 
+元実装には，TrackNet(テニス), TrackNetV2(バドミントン), tta(卓球)データセット用のローダーが用意されている．
 
-## Implementation Details
+各データセットは以下でダウンロード可能．
 
-### Framework
-- **PyTorch**
+- [TrackNet](https://drive.google.com/drive/folders/11r0RUaQHX7I3ANkaYG4jOxXK1OYo01Ut)
+- [TrackNetV2](https://nycu1-my.sharepoint.com/:u:/r/personal/tik_m365_nycu_edu_tw/Documents/OpenDataset/TrackNetV2_Badminton/TrackNetV2.zip?csf=1&web=1&e=G1dBec)
+- tta -> TOTNet作者にメールで問い合わせ．
 
-### Hardware Specifications
-- 2 × NVIDIA **A100** GPUs
+```sh
+├── data/                      # データセット格納ディレクトリ
+│   ├── badminton/             # バドミントンデータセット
+│   │   └── TrackNetV2/        # TrackNetV2データ(TrackNetV2作者が用意)
+│   ├── tennis/                # テニスデータセット
+│   │   └── TrackNet/          # TrackNetデータ(TrackNet作者が用意)
+│   └── table_tennis/          # 卓球データセット
+│       └── tta/               # ttaデータセット(TOTNet作者が用意)
+```
 
-### Training Hyperparameters
+ダウンロードしてきたデータを上記の通りに配置し，
+学習時に以下のパラメータを指定することで，データセットを読み込むことができる．
 
-| Parameter         | Setting     |
-|------------------|-------------|
-| Learning Rate     | `5e-4`      |
-| Weight Decay      | `5e-5`      |
-| Batch Size        | `16`        |
-| Epochs            | `30`        |
-| Visibility Weights| `[1, 2, 2, 3]` |
+- `--dataset_choice 'tennis'`: TrackNetV2
+- `--dataset_choice 'badminton'`: TrackNet
+- `--dataset_choice 'tennis'`: tta
 
-All models were trained using the [AdamW optimizer](https://arxiv.org/abs/1711.05101), and these hyperparameters were consistent across datasets unless otherwise specified.
+また, 上のオリジナル実装にあるオプションに加えて，カスタムのデータセットを読み込むオプションも追加.
 
-## Other Models
+- `--dataset_choice 'tracknetv2'`
+  実装は，`src/config/config.py` を確認して欲しい．
 
-In our study, we re-implemented several ball tracking models.
+  ```sh
+  .
+  ├── README.md
+  ├── test
+  │   ├── match1
+  │   │   ├── csv
+  │   │   │   ├── 1_05_02_ball.csv
+  │   │   │   ├── (...)
+  │   │   │   └── 2_03_10_ball.csv
+  │   │   ├── frame
+  │   │   │   ├── 1_05_02/
+  │   │   │   │   ├──── 00000.png
+  │   │   │   │   ├──── (...)
+  │   │   │   │   └──── XXXXX.png
+  │   │   │   ├── (...)
+  │   │   │   └── 2_03_10/
+  │   │   └── video
+  │   │       ├── 1_05_02.mp4
+  │   │       ├── (...)
+  │   │       └── 2_03_10.mp4
+  │   ├── match2
+  │   └── match3
+  └── train
+      ├── match1
+      ├── (...)
+      └── match26
 
-- [TrackNetV2](https://ieeexplore.ieee.org/document/9302757) ([Sun et al., 2020](#)): re-implemented from scratch.
-- [monoTrack](https://github.com/jhwang7628/monotrack) ([Liu et al., 2022](#)): re-implemented from scratch.
-- [TTNet](https://ieeexplore.ieee.org/document/9150877) ([Voeikov et al., 2020](#)): re-implemented from scratch.
+  32 directories, 1 file
+  ```
 
-We directly used the [WASB model](https://github.com/nttcom/WASB-SBDT) by [Tarashima et al., 2023](#) via their official GitHub repository, which provided a strong benchmark due to its recent state-of-the-art performance.
+---
 
-### Note on TTNet Evaluation
+## 学習の実行
 
-TTNet is originally designed for a specific resolution of **128×320 pixels**, as used in its paper. Modifying its architecture to accommodate our input resolution of **288×512 pixels** would require significant changes and could affect its performance. To ensure a **fair comparison**, we evaluated TTNet across all datasets using its native resolution and settings.
+### 基本的な学習コマンド
 
+以下が，TrackNetV2 フォーマットでの学習例である．
 
-## Ablation Study
+```bash
+# シングルGPU（未テスト）
+# worked with RTX4080 Super 16GB
+python src/main.py \
+  --num_epochs 30 \
+  --saved_fn 'TOTNet' \
+  --num_frames 5 \
+  --optimizer_type adamw \
+  --lr 5e-4 \
+  --loss_function WBCE \
+  --weight_decay 5e-5 \
+  --img_size 288 512 \
+  --batch_size 3 \
+  --print_freq 100 \
+  --dataset_choice 'tracknetv2' \
+  --dataset_dir '/opt/ml/data/TrackNetV2' \
+  --weighting_list 1 2 2 3 \
+  --model_choice 'TOTNet' \
+  --occluded_prob 0.1 \
+  --ball_size 4 \
+  --val-size 0.2 \
+  --gpu_idx 0 \
+  --pretrained_path '/opt/ml/checkpoints/TOTNet_best.pth' \
+  --no_test # \
+  # 学習を再開したい場合は，以下．
+  # --pretrained_path '/opt/ml/checkpoints/TOTNet_best.pth' \
+  # --start_epoch 10 # 10 epochから再開する場合
 
-We evaluated the impact of varying the number of input frames on model performance. Interestingly, increasing the number of frames beyond 5 did not improve accuracy. This is likely due to the frequent trajectory changes in racket sports—caused by rapid direction shifts when the ball is hit—making longer temporal windows less useful.
+# マルチGPU（未テスト）
+torchrun --nproc_per_node=2 main.py \
+  --num_epochs 30   \
+  --saved_fn 'TOTNet_multi_gpu' \
+  --num_frames 3  \
+  --optimizer_type adamw  \
+  --lr 5e-4 \
+  --loss_function WBCE  \
+  --weight_decay 5e-5 \
+  --img_size 288 512 \
+  --batch_size 22 \
+  --print_freq 100 \
+  --dist_url 'env://' \
+  --dist_backend 'nccl' \
+  --multiprocessing_distributed \
+  --distributed \
+  --dataset_choice 'tracknetv2' \
+  --weighting_list 1 2 2 3   \
+  --model_choice 'motion_light'  \
+  --occluded_prob 0.1 \
+  --ball_size 4 \
+  --val-size 0.2 \
+  --no_test
+```
 
-![Accuracy vs Frame Count](images/Model_Accuracy_Different_Frames.png)
-*Figure: Model accuracy across different numbers of input frames (3, 5, 7, 9) for each visibility level. Visibility 0 = Out of Frame, 1 = Clearly Visible, 2 = Partially Occluded, 3 = Fully Occluded*
+---
 
-We also compared using the **middle frame** versus the **last frame** as the prediction target. As shown below, performance remained consistent across both configurations. This suggests that **TOTNet effectively predicts ball trajectories using only past frames**, without requiring symmetric or future context.
+## テストと評価
 
-![Middle vs Last Frame Target](images/Model_Accuracy_Different_Frames_Bidirect.png)
-*Figure: Model accuracy using the middle frame as target across varying input frame counts and visibility levels. Visibility 0 = Out of Frame, 1 = Clearly Visible, 2 = Partially Occluded, 3 = Fully Occluded*
+```bash
+# 学習済みモデルのテスト
+python src/test.py \
+    --checkpoint outputs/checkpoints/best_model.pth \
+    --dataset_choice badminton \
+    --test_data_path data/badminton_data/test_match1
+
+# デモの実行
+python src/demo.py \
+    --video_path data/badminton_data/test_video.mp4 \
+    --checkpoint outputs/checkpoints/best_model.pth
+```
+
+---
+
+## トラブルシューティング
+
+### CUDA Out of Memory
+
+- `batch_size`を小さくする
+- `img_size`を小さくする（例: `--img_size 144 256`）
+- gradient checkpointingを有効にする
+
+---
+
+## 参考文献
+
+オリジナル論文とリポジトリ：
+
+- [TOTNet GitHub Repository](https://github.com/AugustRushG/TOTNet)
+- 関連研究: TrackNet, WASB-SBDT, TTNet

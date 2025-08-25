@@ -11,3 +11,6 @@ tqdm
 scipy
 ninja
 tensorboard
+pyyaml
+einops
+addict

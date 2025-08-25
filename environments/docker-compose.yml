@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  totnet:
+    image: totnet:dev
+    container_name: totnet
+    stdin_open: true
+    tty: true
+    # NOTE: 各自設定してください．
+    volumes:
+      - ${DATASET_PATH:-../data}:/opt/ml/data
+      - ${BASH_HISTORY_PATH:-../.bash_history}:/root/.bash_history
+      - ${MODELS_PATH:-../models}:/opt/ml/checkpoints
+      - ${RESULTS_PATH:-../outputs/results}:/opt/ml/results
+      # Development mode: Uncomment the following line to mount host source code
+      # This allows real-time code editing but shares code across all containers
+      # - ../src:/opt/ml/code/src
+      # Production mode: Keep the above line commented to use code from the image
+      # This ensures each container has its own independent code copy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: 8GB
+    restart: always
