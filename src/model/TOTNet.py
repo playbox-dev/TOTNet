@@ -9,7 +9,7 @@ import torchvision.ops.deform_conv
 from einops import rearrange
 
 sys.path.append('../')
-from model.backbone_positional_encoding import create_positional_encoding
+# from model.backbone_positional_encoding import create_positional_encoding  # File not found, commented out
     
 
 class ConvBlock(nn.Module):
