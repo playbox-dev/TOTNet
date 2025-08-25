@@ -803,6 +803,12 @@ def get_all_detection_infor_tracknetv2(split_type, configs):
                 sub_ball_frame_indices = [
                     ball_frameidx - (num_frames - i) for i in range(num_frames + 1)
                 ]
+                
+                # Check if any frame index is negative (assuming frames start from 0)
+                min_frame_idx = min(sub_ball_frame_indices)
+                if min_frame_idx < 0:
+                    skipped_frame += 1
+                    continue
 
                 # Build image path list
                 img_path_list = []
