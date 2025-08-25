@@ -106,6 +106,16 @@ def create_occlusion_train_val_dataloader(
             transform=train_transform,
             num_samples=configs.num_samples,
         )
+    elif configs.dataset_choice == "tracknetv2":
+        # TrackNetV2 format - similar to Badminton but with custom folder structure
+        train_dataset = Badminton_Dataset(
+            train_events_infor,
+            train_events_label,
+            transform=train_transform,
+            num_samples=configs.num_samples,
+        )
+    else:
+        raise ValueError(f"Unknown dataset_choice: {configs.dataset_choice}")
 
     # If subset_size is provided, create a subset for training
     if subset_size is not None:
@@ -175,6 +185,16 @@ def create_occlusion_train_val_dataloader(
                 transform=val_transform,
                 num_samples=configs.num_samples,
             )
+        elif configs.dataset_choice == "tracknetv2":
+            # TrackNetV2 format - similar to Badminton but with custom folder structure
+            val_dataset = Badminton_Dataset(
+                val_events_infor,
+                val_events_label,
+                transform=val_transform,
+                num_samples=configs.num_samples,
+            )
+        else:
+            raise ValueError(f"Unknown dataset_choice: {configs.dataset_choice}")
 
         # If subset_size is provided, create a subset for validation
         if subset_size is not None:

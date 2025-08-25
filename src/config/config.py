@@ -405,7 +405,9 @@ def parse_configs():
 
     # configs.dataset_dir = os.path.join(configs.working_dir, 'dataset')
 
-    configs.dataset_dir = os.path.join("../", "dataset")
+    # Set default dataset_dir only if not specified via command line
+    if configs.dataset_dir is None:
+        configs.dataset_dir = os.path.join("../", "dataset")
     configs.train_game_list = ["game_1", "game_2", "game_3", "game_4", "game_5"]
     configs.test_game_list = [
         "test_1",
