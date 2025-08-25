@@ -12,8 +12,8 @@ from tqdm import tqdm
 # from model.propose_model import build_detector
 from model.tracknet import build_TrackerNet, build_TrackNetV2
 from model.wasb import build_wasb
-from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet import build_motion_model_light
-from PhysicsInformedDeformableAttentionNetwork.src.model.TOTNet_OF import build_motion_model_light_opticalflow
+from model.TOTNet import build_motion_model_light
+from model.TOTNet_OF import build_motion_model_light_opticalflow
 from model.monoTrack import build_monoTrack
 from model.TTNet import build_TTNet
 from model.model_utils import make_data_parallel, get_num_parameters
