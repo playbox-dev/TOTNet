@@ -147,14 +147,14 @@ python -c "import torch; print(torch.cuda.is_available())"
 │       └── tta/               # ttaデータセット(TOTNet作者が用意)
 ```
 
-ダウンロードしてきたデータを上記の通りに配置すれば，
+ダウンロードしてきたデータを上記の通りに配置し，
 学習時に以下のパラメータを指定することで，データセットを読み込むことができる．
 
 - `--dataset_choice 'tennis'`: TrackNetV2
 - `--dataset_choice 'badminton'`: TrackNet
 - `--dataset_choice 'tennis'`: tta
 
-また上のオリジナル実装にあるオプションに加えて，カスタムのデータセットを読み込むオプションも追加.
+また, 上のオリジナル実装にあるオプションに加えて，カスタムのデータセットを読み込むオプションも追加.
 
 - `--dataset_choice 'tracknetv2'`
   実装は，`src/config/config.py` を確認して欲しい．
@@ -195,21 +195,59 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 ### 基本的な学習コマンド
 
-```bash
-# シングルGPU
-python src/main.py \
-    --num_epochs 30 \
-    --model_choice TOTNet \
-    --dataset_choice badminton \
-    --batch_size 8
+以下が，TrackNetV2 フォーマットでの学習例である．
 
-# マルチGPU（分散学習）
-torchrun --nproc_per_node=2 src/main.py \
-    --num_epochs 30 \
-    --model_choice TOTNet \
-    --dataset_choice tennis \
-    --batch_size 24 \
-    --distributed
+```bash
+# シングルGPU（未テスト）
+# worked with RTX4080 Super 16GB
+python src/main.py \
+  --num_epochs 30 \
+  --saved_fn 'TOTNet' \
+  --num_frames 5 \
+  --optimizer_type adamw \
+  --lr 5e-4 \
+  --loss_function WBCE \
+  --weight_decay 5e-5 \
+  --img_size 288 512 \
+  --batch_size 3 \
+  --print_freq 100 \
+  --dataset_choice 'tracknetv2' \
+  --dataset_dir '/opt/ml/data/TrackNetV2' \
+  --weighting_list 1 2 2 3 \
+  --model_choice 'TOTNet' \
+  --occluded_prob 0.1 \
+  --ball_size 4 \
+  --val-size 0.2 \
+  --gpu_idx 0 \
+  --pretrained_path '/opt/ml/checkpoints/TOTNet_best.pth' \
+  --no_test # \
+  # 学習を再開したい場合は，以下．
+  # --pretrained_path '/opt/ml/checkpoints/TOTNet_best.pth' \
+  # --start_epoch 10 # 10 epochから再開する場合
+
+# マルチGPU（未テスト）
+torchrun --nproc_per_node=2 main.py \
+  --num_epochs 30   \
+  --saved_fn 'TOTNet_multi_gpu' \
+  --num_frames 3  \
+  --optimizer_type adamw  \
+  --lr 5e-4 \
+  --loss_function WBCE  \
+  --weight_decay 5e-5 \
+  --img_size 288 512 \
+  --batch_size 22 \
+  --print_freq 100 \
+  --dist_url 'env://' \
+  --dist_backend 'nccl' \
+  --multiprocessing_distributed \
+  --distributed \
+  --dataset_choice 'tracknetv2' \
+  --weighting_list 1 2 2 3   \
+  --model_choice 'motion_light'  \
+  --occluded_prob 0.1 \
+  --ball_size 4 \
+  --val-size 0.2 \
+  --no_test
 ```
 
 ---
